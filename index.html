@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Velocivector 2D CAD</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header>
+  <div class="menu-bar">
+    <details class="app-menu">
+      <summary>Fichier</summary>
+      <div class="menu-popup file-menu">
+        <button id="new">Nouveau</button>
+        <button id="open">Ouvrir… <kbd>Ctrl+O</kbd></button>
+        <button id="import">Importer DXF / SVG…</button>
+        <button id="importRaster">Importer une image…</button>
+        <hr>
+        <button id="save">Enregistrer <kbd>Ctrl+S</kbd></button>
+        <button id="saveAs">Enregistrer sous… <kbd>Ctrl+Maj+S</kbd></button>
+        <hr>
+        <button id="quickExport" type="button">Export rapide…</button>
+        <hr><button id="preferences">Préférences…</button>
+      </div>
+    </details>
+    <details class="app-menu">
+      <summary>Contrainte</summary>
+      <div class="menu-popup" id="constraintMenu"></div>
+    </details>
+    <details class="app-menu">
+      <summary>Dessin</summary>
+      <div class="menu-popup" id="drawingMenu"></div>
+    </details>
+    <details class="app-menu">
+      <summary>Modification</summary>
+      <div class="menu-popup" id="modificationMenu"></div>
+    </details>
+  </div>
+  <strong>Veloci<span>vector</span> <small>2D CAD</small></strong>
+  <input hidden type="file" id="file" accept=".vcv,.vvec">
+  <input hidden type="file" id="vectorFile" accept=".dxf,.svg,image/svg+xml">
+  <input hidden type="file" id="rasterFile" accept=".png,.jpg,.jpeg,.jfif,.avif,.webp,.gif,image/png,image/jpeg,image/avif,image/webp,image/gif">
+  <button id="fit" title="Tout voir (F)">Tout voir</button><button id="theme" type="button" aria-label="Mode sombre" aria-pressed="true">Mode sombre</button><button id="panel" aria-label="Afficher ou masquer le panneau">☰</button>
+</header>
+<nav><button id="undo" title="Ctrl+Z">↶ Annuler</button><button id="redo" title="Ctrl+Y">↷ Rétablir</button><span class="divider"></span><div id="constraints" class="constraints" role="group" aria-label="Contraintes géométriques"><span>Contraintes</span><button type="button" data-angle="horizontal">Horizontale</button><button type="button" data-angle="vertical">Verticale</button><button type="button" data-angle="coincident">Coïncidente</button><button type="button" data-angle="midpoint">Milieu</button><button type="button" data-angle="parallel">Parallèle</button><button type="button" data-angle="collinear">Colinéaire</button><button type="button" data-angle="perpendicular">Perpendiculaire</button><button type="button" data-angle="equal">Égale</button><button type="button" data-angle="tangent">Tangente</button><button type="button" data-angle="symmetry">Symétrie</button><button type="button" data-angle="locked">Verrouillée</button></div><span class="divider"></span><button data-operation="transform">Transformer</button><button data-operation="mirror">Miroir</button><button data-operation="reverse">Inverser</button><button data-operation="explode">Éclater</button><button data-operation="close">Fermer</button><button data-operation="autoClose">Fermeture automatique</button><button data-operation="fillet">Congé</button><button data-operation="scissors">Ciseaux</button>
+<span class="divider" aria-hidden="true"></span>
+<details class="app-menu precision-menu">
+  <summary title="Grille et aimantation" aria-label="Grille et aimantation">
+    <span id="precisionIcons" aria-hidden="true"><img data-snap-icon="grid" alt=""><img data-snap-icon="point" alt=""><img data-snap-icon="coincidence" alt=""></span>
+  </summary>
+  <div class="menu-popup precision-options"><label><input type="checkbox" id="snap" checked> Aimantation</label><label><input type="checkbox" id="autoCoincidence" checked> Coïncidence automatique</label><label><input type="checkbox" id="grid"> Grille</label><label><input type="checkbox" id="gridSnap"> Accrocher à la grille</label><label>Pas de grille <input id="spacing" type="number" min="0.000001" step="any" value="10"></label><label>Unité <select id="units"></select></label></div>
+</details>
+<div id="constructionOptions" role="group" aria-label="Trait de construction">
+  <div id="frameReadout" role="group" aria-label="Coordonnées du cadre de sélection" hidden>
+    <button id="frameCoordinates" type="button" aria-label="Coordonnées absolues du cadre" aria-pressed="false">
+      <svg class="command-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v16h16M13 8v8m-4-4h8"/><circle cx="5" cy="19" r="1.5"/></svg>
+    </button>
+    <output id="framePosition"></output><span id="frameStep" hidden></span>
+  </div>
+  <button id="constructionToggle" type="button" aria-label="Trait de construction" aria-pressed="false">
+    <svg class="command-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 18 4-3m3-2 4-3m3-2 4-3"/></svg>
+  </button>
+  <select id="constructionStyle" aria-label="Motif du trait de construction" title="Motif du trait de construction">
+    <option value="dashed">Tirets</option><option value="dashDot">Tiret-point</option>
+  </select>
+</div>
+</nav>
+<main><aside id="tools" aria-label="Outils de dessin"></aside><section id="workspace"><canvas id="drawing" aria-label="Zone de dessin"></canvas>
+<div class="workspace-hints">
+  <div id="hint"></div>
+  <div id="toolShortcutPanel">
+    <ul id="toolShortcuts" aria-label="Raccourcis de l’outil actif" hidden></ul>
+    <button id="toggleToolShortcuts" type="button" aria-controls="toolShortcuts" aria-expanded="true"
+      title="Masquer les raccourcis" aria-label="Masquer les raccourcis">
+      <svg class="command-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M6.5 9.5h.5m3 0h.5m3 0h.5m3 0h.5m-11 3h.5m10 0h.5m-7.5 2.5h4"/></svg>
+    </button>
+  </div>
+</div>
+<div id="closureReadout" aria-label="État des tracés sélectionnés" hidden>
+  <div>Tracés ouverts <output id="openContourCount">0</output></div>
+  <div>Tracés fermés <output id="closedContourCount">0</output></div>
+</div>
+<div id="snapIndicator" aria-hidden="true" hidden></div></section>
+<aside id="options"><div id="optionsScroll"><h2 id="toolName"></h2><p id="help"></p><form id="selectedOriginForm" hidden>
+<h2 id="selectedOriginName"></h2>
+<label>X (POA) <input id="selectedOriginX" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
+<label>Y (POA) <input id="selectedOriginY" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
+<button type="submit">Appliquer</button>
+</form><form id="point"><label><span id="coordinateX">X</span> <input id="x" inputmode="decimal" placeholder="0"></label><label><span id="coordinateY">Y</span> <input id="y" inputmode="decimal" placeholder="0"></label><button>Poser le point</button></form><label id="sidesRow">Côtés <input id="sides" type="number" min="3" max="360" value="6"></label><hr><h2>Calques</h2><div id="layers"></div>
+<form id="rasterOptions" hidden>
+  <fieldset>
+    <legend>Image matricielle</legend>
+    <label>Rotation (°) <input id="rasterAngle" type="number" min="-360" max="360" step="any"></label>
+    <label>Échelle (%) <input id="rasterScale" type="number" min="0" step="any" title="0 conserve l’échelle actuelle"></label>
+    <label for="rasterActiveOpacity">Opacité active <output id="rasterActiveValue" for="rasterActiveOpacity"></output></label>
+    <input id="rasterActiveOpacity" type="range" min="0" max="100">
+    <label for="rasterInactiveOpacity">Opacité inactive <output id="rasterInactiveValue" for="rasterInactiveOpacity"></output></label>
+    <input id="rasterInactiveOpacity" type="range" min="0" max="100">
+    <button type="submit">Appliquer</button>
+    <button type="button" id="resetRasterOptions">Par défaut</button>
+    <div class="raster-tools">
+      <button type="button" id="calibrateRaster" aria-pressed="false" title="Calibrer" aria-label="Calibrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M3 7v10m18-10v10M7 9l-4 3 4 3m10-6 4 3-4 3"/></svg></button>
+      <button type="button" id="rotateRaster" aria-pressed="false" title="Tourner" aria-label="Tourner"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 6m-4-6h4V5M12 10v4m-2-2h4"/></svg></button>
+      <button type="button" id="alignRasterOrigin" aria-pressed="false" title="Caler sur le POA" aria-label="Caler sur le POA"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20m-14 0a4 4 0 1 0 8 0 4 4 0 0 0-8 0Z"/></svg></button>
+    </div>
+  </fieldset>
+</form><label id="activeOriginRow">Origine active <select id="activeOrigin"></select></label><form id="addLayer"><input id="layerName" aria-label="Nom du calque" placeholder="Nouveau calque" required maxlength="80"><button aria-label="Ajouter le calque">+</button></form></div><section id="dimensionDisplay"><label for="constructionOpacity">Opacité des traits de construction <output id="constructionOpacityValue" for="constructionOpacity">80 %</output></label><input id="constructionOpacity" type="range" min="0" max="100" value="80"><button id="resetConstructionOpacity" type="button">Par défaut</button><hr><label for="dimensionOpacity">Opacité des cotes <output id="dimensionOpacityValue" for="dimensionOpacity">60 %</output></label><input id="dimensionOpacity" type="range" min="0" max="100" value="60"><button id="resetDimensionOpacity" type="button">Par défaut</button></section></aside></main>
+<footer><span id="status" role="status">Prêt</span><span id="coords"></span><span id="zoom"></span></footer>
+<template id="splineSettings">
+  <div id="transformModes" class="tool-actions" role="group" aria-label="Mode de transformation" hidden>
+    <button type="button" data-transform-mode="auto">Auto</button>
+    <button type="button" data-transform-mode="move" title="Verrouiller le déplacement">Déplacer</button>
+    <button type="button" data-transform-mode="scale" title="Verrouiller la mise à l’échelle">Échelle</button>
+    <button type="button" data-transform-mode="rotate" title="Verrouiller la rotation">Tourner</button>
+  </div>
+  <section id="modifyOptions" hidden>
+    <h2 id="modifyName"></h2><p id="modifyHint"></p>
+    <div id="modifyPivot">
+      <label>Pivot X <input id="pivotX" type="number" step="any"></label>
+      <label>Pivot Y <input id="pivotY" type="number" step="any"></label>
+      <button type="button" id="pickPivot">Choisir dans le dessin</button>
+    </div>
+    <div id="moveOptions" hidden>
+      <label>Coordonnées <select id="moveMode"><option value="relative">Relatives</option><option value="absolute">Absolues</option></select></label>
+      <label>X <input id="moveX" type="number" step="any" value="0"></label>
+      <label>Y <input id="moveY" type="number" step="any" value="0"></label>
+    </div>
+    <label id="rotateOptions">Angle (°) <input id="rotateValue" type="number" step="any" value="0"></label>
+    <div id="scaleOptions">
+      <button type="button" id="scaleLock" aria-pressed="true">🔒 Proportions</button>
+      <label>Facteur X <input id="scaleValue" type="number" min="0.000001" step="any" value="1"></label>
+      <label id="scaleYRow">Facteur Y <input id="scaleY" type="number" min="0.000001" step="any" value="1"></label>
+      <label id="scaleDimensionsRow"><input id="scaleDimensions" type="checkbox" checked> Adapter les cotes</label>
+    </div>
+    <div id="mirrorOptions">
+      <fieldset><legend>Axe</legend>
+        <label><input type="radio" name="mirrorAxis" id="mirrorHorizontal" checked> Horizontal</label>
+        <label><input type="radio" name="mirrorAxis" id="mirrorVertical"> Vertical</label>
+        <label><input type="radio" name="mirrorAxis" id="mirrorSegment"> Segment</label>
+      </fieldset>
+      <button type="button" id="pickMirrorAxis">Choisir le segment</button>
+      <label><input type="checkbox" id="mirrorCopy"> Copie miroir</label>
+    </div>
+    <div id="closeOptions">
+      <label>Tolérance (mm) <input id="closeTolerance" type="number" min="0" step="any" value="0.1"></label>
+      <button type="button" id="resetCloseTolerance">Par défaut</button>
+    </div>
+    <div id="autoCloseOptions" hidden>
+      <label>Méthode <select id="autoCloseMethod">
+        <option value="contact">Prolonger ou raccourcir</option>
+        <option value="arc">Arc tangent</option>
+        <option value="segment">Segment de raccord</option>
+      </select></label>
+      <label>Distance de jonction (mm) <input id="autoCloseTolerance" type="number" min="0" step="any" value="0.1"></label>
+      <button type="button" id="resetAutoCloseTolerance">Par défaut</button>
+      <p id="closureProposal"></p>
+    </div>
+    <div id="filletOptions" hidden>
+      <label>Rayon (mm) <input id="filletRadius" type="number" min="0" step="any" value="5"></label>
+      <button id="resetFilletRadius" type="button">Par défaut</button>
+    </div>
+    <div id="scissorsOptions" hidden>
+      <label>Tolérance (mm) <input id="scissorsTolerance" type="number" min="0" step="any" value="0.05"></label>
+      <label><input id="scissorsCoincidence" type="checkbox"> Coïncidence aux limites de coupe</label>
+      <button id="resetScissors" type="button">Par défaut</button>
+    </div>
+    <div class="tool-actions"><button type="button" id="applyModification">Appliquer</button><button type="button" id="cancelModification">Annuler</button></div>
+  </section>
+  <section id="clipboardOptions" hidden>
+    <h2>Cotes et contraintes à copier</h2>
+    <div id="clipboardRelations"></div>
+  </section>
+  <form id="offsetOptions" hidden>
+    <h2>Décalage de tracé</h2>
+    <label>Distance (mm) <input id="offsetDistance" type="number" min="0.000001" step="any" value="1" required></label>
+    <fieldset><legend>Côté</legend>
+      <label><input id="offsetInside" type="checkbox"> Intérieur</label>
+      <label><input id="offsetOutside" type="checkbox" checked> Extérieur</label>
+    </fieldset>
+    <p>Sur une ligne ou un tracé ouvert sans centre, intérieur correspond au côté gauche dans le sens du tracé.</p>
+    <label><input id="offsetSelectResult" type="checkbox"> Sélectionner le nouveau tracé</label>
+    <button id="applyOffset" type="submit">Créer le décalage</button>
+  </form>
+  <section id="dimensionOptions" hidden>
+    <label>Type de cote
+      <select id="linearDimensionMode">
+        <option value="auto">Automatique</option><option value="aligned">Longueur</option>
+        <option value="width">Horizontale</option><option value="height">Verticale</option>
+      </select>
+    </label>
+  </section>
+  <label id="splineDefault" hidden>Longueur par défaut (%)
+    <input id="splineTension" aria-label="Longueur automatique des poignées en pourcentage" type="number" min="0" max="500" step="any" value="138">
+  </label>
+  <button id="resetSplineTension" type="button" hidden>Par défaut</button>
+  <section id="knotOptions" hidden>
+    <h2>Point Bézier</h2>
+    <label id="incomingRow" hidden>Bras entrant (%) <input id="incomingRatio" type="number" min="0" max="500" step="any"></label>
+    <label><span id="outgoingLabel">Longueur des bras (%)</span> <input id="knotRatio" type="number" min="0" max="500" step="any"></label>
+    <button id="resetKnot" type="button">Automatique</button>
+    <button id="toggleKnotSymmetry" type="button">Dissocier les longueurs</button>
+    <button id="toggleKnotAngles" type="button">Dissocier les angles</button>
+  </section>
+</template>
+<div id="layerPalette" class="menu-popup angle-context" aria-label="Palette des calques" hidden>
+  <div id="layerSwatches" class="layer-swatches"></div>
+  <label>Couleur personnalisée <input id="layerCustomColor" type="color"></label>
+</div>
+<div id="angleContext" class="menu-popup angle-context" aria-label="Contraintes de cet élément" hidden></div>
+<div id="arcOptions" class="menu-popup angle-context tool-variants" data-tool-popup="arc" aria-label="Méthodes de tracé d’arc" hidden>
+  <button type="button" data-tool-method="center">Centre, départ, arrivée</button>
+  <button type="button" data-tool-method="three">Deux extrémités, puis passage</button>
+</div>
+<div id="rectOptions" class="menu-popup angle-context tool-variants" data-tool-popup="rect" aria-label="Méthodes de tracé du rectangle" hidden>
+  <button type="button" data-tool-method="corners">Deux coins opposés</button>
+  <button type="button" data-tool-method="center">Centre, puis coin</button>
+</div>
+<div id="polyOptions" class="menu-popup angle-context tool-variants" data-tool-popup="poly" aria-label="Variantes de polyligne" hidden>
+  <button type="button" data-tool-method="tangent">Polyligne tangente</button>
+  <button type="button" data-tool-method="classic">Polyligne classique</button>
+</div>
+<dialog id="exportDialog" aria-labelledby="exportTitle">
+  <form id="exportForm">
+    <h2 id="exportTitle">Export rapide</h2>
+    <label>Nom du fichier <input id="exportName" type="text" required></label>
+    <label>Format <select id="exportFormat"></select></label>
+    <fieldset id="exportScope">
+      <legend>Tracés à exporter</legend>
+      <label><input type="radio" name="exportScope" value="selection"> Sélection en cours</label>
+      <label><input type="radio" name="exportScope" value="layers"> Par calque</label>
+      <div id="exportLayers" role="group" aria-label="Calques à exporter" hidden></div>
+      <label><input type="radio" name="exportScope" value="all"> Tout le dessin</label>
+    </fieldset>
+    <label class="export-check"><input id="exportConstruction" type="checkbox"> Inclure les traits de construction</label>
+    <p id="exportNotice" role="status" hidden></p>
+    <div class="tool-actions"><button id="confirmExport" type="submit">Enregistrer sous…</button><button id="cancelExport" type="button">Annuler</button></div>
+  </form>
+</dialog>
+<dialog id="importDialog" aria-labelledby="importTitle">
+  <form id="importForm">
+    <header class="import-header"><h2 id="importTitle">Atelier d’importation</h2><span id="importFilename"></span><button type="button" id="cancelImport">Fermer</button></header>
+    <div class="import-layout">
+      <div class="import-preview">
+        <div class="import-preview-controls">
+          <label>Aperçu <select id="importView"><option value="source">Source</option><option id="importOptimizedView" value="optimized" disabled>Proposition</option></select></label>
+          <label>Calque <select id="importPreviewLayer"></select></label>
+          <button type="button" id="fitImport">Tout voir</button><output id="importZoom">100 %</output>
+        </div>
+        <div class="import-canvas">
+          <canvas id="importDrawing" aria-label="Aperçu de la géométrie importée"></canvas>
+          <div id="importContourReadout" aria-label="État des tracés dans l’aperçu" hidden>
+            <div>Tracés ouverts <output id="importOpenCount">0</output></div>
+            <div>Tracés fermés <output id="importClosedCount">0</output></div>
+            <div>Chevauchements <output id="importOverlapCount">—</output></div>
+          </div>
+        </div>
+      </div>
+      <aside class="import-options">
+        <fieldset><legend>Reconnaissance</legend>
+          <label for="importLineTolerance">Droites (mm) <input id="importLineTolerance" type="number" min="0" step="any" value="0.1" required></label>
+          <label for="importArcTolerance">Arcs et cercles (mm) <input id="importArcTolerance" type="number" min="0" step="any" value="0.15" required></label>
+          <label for="importBezierTolerance">Béziers (mm) <input id="importBezierTolerance" type="number" min="0" step="any" value="0.15" required></label>
+          <label><input id="importSymmetricHandles" type="checkbox" checked> Privilégier les poignées symétriques</label>
+          <label><input id="importJoin" type="checkbox" checked> Regrouper les segments jointifs</label>
+          <label><input id="importDeduplicate" type="checkbox" checked> Retirer les lignes et cercles en double</label>
+          <button data-reset-import-group type="button">Par défaut</button>
+        </fieldset>
+        <fieldset><legend>Contraintes automatiques</legend>
+          <label><input id="importCoincident" type="checkbox" checked> Coïncidence</label>
+          <label><input id="importTangent" type="checkbox" checked> Tangence</label>
+          <label><input id="importAxes" type="checkbox" checked> Horizontale et verticale</label>
+          <button data-reset-import-group type="button">Par défaut</button>
+        </fieldset>
+        <fieldset id="importJunctionOptions" hidden><legend>Jonction automatique des tracés</legend>
+          <label><input id="importJunction" type="checkbox" checked> Rechercher les jonctions par calque</label>
+          <label>Méthode <select id="importJunctionMethod">
+            <option value="contact">Prolonger ou raccourcir</option>
+            <option value="arc">Arc tangent</option>
+            <option value="segment">Segment de raccord</option>
+          </select></label>
+          <label>Proximité (mm) <input id="importJunctionTolerance" type="number" min="0" step="any" value="0.1"></label>
+          <button data-reset-import-group type="button">Par défaut</button>
+        </fieldset>
+        <fieldset><legend>Détection des chevauchements</legend>
+          <label title="Décoché à l’ouverture des fichiers de plus de 1,5 Mo"><input id="checkImportOverlaps" type="checkbox" checked> Rechercher les chevauchements</label>
+          <label><input id="removeImportOverlaps" type="checkbox"> Supprimer les chevauchements à l’import</label>
+          <label>Tolérance par calque (mm) <input id="importOverlapTolerance" type="number" min="0" step="any" value="0.05"></label>
+          <button data-reset-import-group type="button">Par défaut</button>
+        </fieldset>
+        <fieldset><legend>Calques</legend>
+          <label><input id="importOneLayer" type="checkbox"> Tout importer sur le même calque</label>
+          <label id="importLayerRow" hidden>Calque cible <select id="importLayer"></select></label>
+          <button data-reset-import-group type="button">Par défaut</button>
+        </fieldset>
+        <button id="calculateLargeImport" type="button" hidden>Calculer le chemin optimal</button>
+        <p id="importStats" role="status"></p>
+        <details id="importActionDetails" open>
+          <summary>Rapport des actions</summary>
+          <div id="importActionReport"></div>
+        </details>
+      </aside>
+    </div>
+    <footer class="import-footer">
+      <div id="importCalculation" hidden>
+        <label id="importProgressLabel" for="importProgress" role="status">Préparation du calcul…</label>
+        <progress id="importProgress"></progress>
+        <button id="stopImportCalculation" type="button">Arrêter le calcul</button>
+      </div>
+      <button id="resetAllImportSettings" type="button">Tout par défaut</button>
+      <button id="importSource" type="button" title="Conserver les tracés d’origine et convertir seulement les courbes nécessaires">Importer sans optimisation</button>
+      <button id="applyImport" type="submit" disabled>Importer la proposition</button>
+    </footer>
+  </form>
+</dialog>
+<dialog id="transferLayerDialog" aria-labelledby="transferLayerTitle">
+<form id="transferLayerForm">
+  <h2 id="transferLayerTitle"></h2>
+  <label>Nom du calque <input id="transferLayerName" required maxlength="80" autofocus></label>
+  <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelTransferLayer">Annuler</button></div>
+</form>
+</dialog>
+<dialog id="removeLayerDialog" aria-labelledby="removeLayerTitle" aria-describedby="removeLayerCount">
+  <h2 id="removeLayerTitle">Supprimer le calque</h2>
+  <p id="removeLayerCount"></p>
+  <button type="button" id="removeLayerTraces">Supprimer les tracés du calque</button>
+  <label>Calque de destination <select id="removeLayerDestination"></select></label>
+  <div class="tool-actions">
+    <button type="button" id="moveLayerTraces">Déplacer les tracés</button>
+    <button type="button" id="cancelRemoveLayer" autofocus>Annuler</button>
+  </div>
+</dialog>
+<dialog id="rasterImportDialog" aria-labelledby="rasterImportTitle">
+  <form id="rasterImportForm">
+    <header>
+      <h2 id="rasterImportTitle">Atelier d’importation d’image</h2>
+      <output id="rasterImportInfo"></output>
+      <button id="resetRasterZoom" type="button" title="Réinitialiser le zoom et recentrer l’image">Recentrer l’image</button>
+    </header>
+    <div class="raster-import-body">
+      <div id="rasterImportViewport" class="raster-import-preview">
+        <canvas id="rasterImportPreview" aria-label="Aperçu de l’image à importer"></canvas>
+      </div>
+      <aside>
+        <label for="rasterBrightness">Luminosité <output id="rasterBrightnessValue"></output></label>
+        <input id="rasterBrightness" type="range" min="-100" max="100" value="0">
+        <label for="rasterContrast">Contraste <output id="rasterContrastValue"></output></label>
+        <input id="rasterContrast" type="range" min="-100" max="100" value="0">
+        <hr>
+        <h3>Protection des couleurs</h3>
+        <button id="pickRasterColor" type="button" aria-pressed="false">Prélever dans l’image</button>
+        <ul id="rasterProtectedColors" aria-label="Couleurs protégées"></ul>
+        <label for="rasterColorTolerance">Tolérance de couleur <output id="rasterColorToleranceValue"></output></label>
+        <input id="rasterColorTolerance" type="range" min="0" max="100" value="5">
+        <label for="rasterUnprotectedOpacity">Opacité des couleurs non protégées <output id="rasterUnprotectedOpacityValue"></output></label>
+        <input id="rasterUnprotectedOpacity" type="range" min="0" max="100" value="100">
+        <hr>
+        <label><input id="showOriginalRaster" type="checkbox"> Voir l’original</label>
+        <button id="resetRasterImport" type="button">Tout par défaut</button>
+      </aside>
+    </div>
+    <footer>
+      <output id="rasterImportStatus" role="status"></output>
+      <button id="cancelRasterImport" type="button">Annuler</button>
+      <button id="applyRasterImport" type="submit">Importer l’image</button>
+    </footer>
+  </form>
+</dialog>
+<dialog id="renameLayerDialog" aria-labelledby="renameLayerTitle">
+  <form id="renameLayerForm">
+    <h2 id="renameLayerTitle">Renommer le calque</h2>
+    <label>Nom du calque <input id="renameLayerName" type="text" maxlength="80" required autofocus></label>
+    <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelRenameLayer">Annuler</button></div>
+  </form>
+</dialog>
+<dialog id="calibrateRasterDialog" aria-labelledby="calibrateRasterTitle">
+  <form id="calibrateRasterForm">
+    <h2 id="calibrateRasterTitle">Calibrer l’image</h2>
+    <label>Distance réelle <input id="calibrateRasterDistance" type="number" min="0" step="any" required autofocus><span id="calibrateRasterUnit"></span></label>
+    <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelCalibrateRaster">Annuler</button></div>
+  </form>
+</dialog>
+<dialog id="originDialog" aria-labelledby="originDialogTitle">
+<form id="originDialogForm">
+  <h2 id="originDialogTitle">Position du POT</h2>
+  <label>X (POA) <input id="originDialogX" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
+  <label>Y (POA) <input id="originDialogY" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
+  <div class="tool-actions"><button type="submit" autofocus>Valider</button><button type="button" id="cancelOrigin">Annuler</button></div>
+</form>
+</dialog>
+<dialog id="preferencesDialog" aria-labelledby="preferencesTitle">
+  <form method="dialog" class="preferences-header">
+    <h2 id="preferencesTitle">Préférences</h2>
+    <button>Fermer</button>
+  </form>
+  <div class="preferences-body">
+    <aside class="preferences-nav" aria-label="Sections des préférences">
+      <button type="button" data-preference-page="languagePreferences" class="active" aria-current="page">Langue</button>
+      <button type="button" data-preference-page="cursorPreferences">Curseurs</button>
+      <button type="button" data-preference-page="shortcutPreferences">Raccourcis</button>
+    </aside>
+    <section id="languagePreferences" class="preferences-content" aria-label="Langue">
+      <div class="preferences-heading"><h2>Langue</h2></div>
+      <label>Langue de l’interface <select id="interfaceLanguage">
+        <option value="auto">Langue du navigateur</option>
+        <option value="en" lang="en">English</option>
+        <option value="fr" lang="fr">Français</option>
+      </select></label>
+    </section>
+    <section id="cursorPreferences" class="preferences-content" aria-label="Curseurs" hidden>
+      <div class="preferences-heading"><h2>Formes par comportement</h2><button type="button" id="resetCursorShapes">Par défaut</button></div>
+      <div id="cursorShapes" class="cursor-preference-grid"></div>
+      <div class="preferences-heading"><h2>Couleurs par outil</h2><button type="button" id="resetCursorColors">Par défaut</button></div>
+      <div id="cursorColors" class="cursor-preference-grid"></div>
+      <div class="preferences-heading"><h2>Indices d’aimantation</h2><button type="button" id="resetSnapIndicators">Par défaut</button></div>
+      <label>Coin préféré <select id="snapIndicatorCorner"><option value="ne">Haut droit</option><option value="nw">Haut gauche</option><option value="se">Bas droit</option><option value="sw">Bas gauche</option></select></label>
+      <div id="snapIndicatorOptions" class="cursor-preference-grid"></div>
+    </section>
+    <section id="shortcutPreferences" class="preferences-content" aria-label="Raccourcis clavier" hidden>
+      <div class="preferences-heading"><h2>Raccourcis clavier</h2><button type="button" id="resetShortcuts">Par défaut</button></div>
+      <p id="shortcutFeedback" role="status"></p>
+      <div id="shortcutList"></div>
+    </section>
+  </div>
+</dialog>
+<script src="locale-en.js"></script><script src="i18n.js"></script><script src="geometry.js"></script><script src="editing.js"></script><script src="constraints.js"></script><script src="formats.js"></script><script src="cursors.js"></script><script src="importing.js"></script><script src="numeric.js"></script><script src="raster-editing.js"></script><script src="app.js"></script>
+</body></html>
+
+
+
+
+
+
+
+
+
+

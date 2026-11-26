@@ -1,0 +1,17 @@
+# Local export and backup archives
+*.zip
+*.7z
+*.rar
+
+# Drawings and exported files kept locally
+*.vcv
+*.dxf
+
+# Local dependencies and generated output
+node_modules/
+coverage/
+
+# System files
+Thumbs.db
+Desktop.ini
+.DS_Store

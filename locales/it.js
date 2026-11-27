@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('it', {
+  "Déplacer la fenêtre": "Sposta finestra",
+  "Redimensionner la fenêtre": "Ridimensiona finestra",
+  "Options par défaut des outils": "Opzioni predefinite degli strumenti",
+  "Grouper": "Raggruppa",
+  "Dégrouper": "Separa gruppo",
+  "help.groups.title": "Raggruppa",
+  "help.groups.effect": "Un clic seleziona il gruppo del livello. I frammenti conservati restano nel gruppo.",
   "Extensions": "Estensioni",
   "help.transmissions.title": "Officina trasmissioni",
   "help.transmissions.effect": "Imposta denti e modulo o passo, poi inserisci la trasmissione e i diametri primitivi nel livello attivo.",
@@ -878,7 +885,8 @@ I18n.register('it', {
   "help.close.effect": "Chiude le tracce che hanno punti di fine entro la tolleranza di spazi specifica.",
   "help.autoClose.effect": "Trova possibili giunti nella selezione. Scegli di estendere o tagliare, aggiungere un arco tangente o aggiungere una linea.",
   "help.fillet.effect": "Imposta il raggio e fai clic vicino ad un angolo compatibile. Lo strumento collega le due parti con un arco tangente e mette in luce un fileto impossibile in rosso.",
-  "help.scissors.effect": "Clicca su una porzione per rimuoverla o spazzare attraverso diverse porzioni.",
+  "help.scissors.effect": "Clicca su una porzione per rimuoverla o spazzare attraverso diverse porzioni. Il taglio supera i vertici e si ferma alle intersezioni, anche proprie. Disattiva l’opzione per tagliare solo il tratto scelto.",
+  "Suivre le tracé jusqu’aux croisements": "Segui il tracciato fino alle intersezioni",
   "help.layers.title": "Gestione di strati",
   "help.layers.effect": "Fare doppio clic sul nome per rinominarlo. Trascinare il maniglia per riordinare gli strati. Il comando Eliminazione ( {remove}) sul maniglia offre le scelte se lo strato contiene tracce. Utilizzare il menu di contesto per copiare o spostare la selezione in un altro strato.",
   "help.construction.effect": "Abilitare lo stile prima di disegnare o togliere le porzioni selezionate con la scorciatoia togliere ( {construction} ). I controlli di livello impostano la visibilità e il pannello di livello controlla l'opacità globale.",

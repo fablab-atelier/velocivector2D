@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('id', {
+  "Déplacer la fenêtre": "Pindahkan jendela",
+  "Redimensionner la fenêtre": "Ubah ukuran jendela",
+  "Options par défaut des outils": "Opsi bawaan alat",
+  "Grouper": "Kelompokkan",
+  "Dégrouper": "Pisahkan grup",
+  "help.groups.title": "Kelompokkan",
+  "help.groups.effect": "Klik anggota untuk memilih grup lapisan. Potongan yang tersisa tetap dikelompokkan.",
   "Extensions": "Ekstensi",
   "help.transmissions.title": "Ruang transmisi",
   "help.transmissions.effect": "Atur jumlah gigi dan modul atau pitch, lalu sisipkan transmisi dan diameter pitch ke lapisan aktif.",
@@ -878,7 +885,8 @@ I18n.register('id', {
   "help.close.effect": "Tutup jejak yang titik akhir berada dalam toleransi celah yang ditentukan.",
   "help.autoClose.effect": "Menemukan kemungkinan sendi dalam pilihan. Pilih untuk memperpanjang atau memotong, menambahkan busur tangent, atau menambahkan garis. Penghitung menunjukkan jejak terbuka dan tertutup.",
   "help.fillet.effect": "Setel radius dan klik dekat sudut yang kompatibel. Alat menghubungkan kedua bagian dengan busur tangent dan menyoroti file yang tidak mungkin di merah.",
-  "help.scissors.effect": "Klik pada bagian untuk menghapus atau menyapu melalui beberapa bagian. Pemotong berhenti di titik dan persimpangan yang terdeteksi. Pilihan kebetulan mengikat titik akhir baru ke geometri yang menghentikan pemotongan.",
+  "help.scissors.effect": "Klik pada bagian untuk menghapus atau menyapu melalui beberapa bagian. Pemotong berhenti di titik dan persimpangan yang terdeteksi. Pilihan kebetulan mengikat titik akhir baru ke geometri yang menghentikan pemotongan. Pangkas melewati titik sudut hingga perpotongan, termasuk perpotongan sendiri. Nonaktifkan opsi untuk memangkas bagian yang diklik saja.",
+  "Suivre le tracé jusqu’aux croisements": "Ikuti jalur hingga persilangan",
   "help.layers.title": "Pengelolaan lapisan",
   "help.layers.effect": "Klik dua kali untuk menamainya. Seret pegangan untuk mengatur ulang lapisan. Komando Hapus ( {remove}) pada pegangan menawarkan pilihan jika lapisan berisi jejak. Gunakan menu konteks untuk menyalin atau memindahkan pilihan ke lapisan lain.",
   "help.construction.effect": "Memungkinkan gaya sebelum menggambar atau mengonversi bagian yang dipilih dengan jalan pintas toggle ( {construction} ). Kontrol lapisan mengatur visibilitas, dan panel lapisan mengontrol opacitas global.",

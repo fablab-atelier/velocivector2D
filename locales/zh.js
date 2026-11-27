@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('zh', {
+  "Déplacer la fenêtre": "移动窗口",
+  "Redimensionner la fenêtre": "调整窗口大小",
+  "Options par défaut des outils": "工具默认选项",
+  "Grouper": "编组",
+  "Dégrouper": "取消编组",
+  "help.groups.title": "编组",
+  "help.groups.effect": "单击任意成员可选择图层中的整个组。修剪后保留的片段仍属于原组。",
   "Extensions": "扩展",
   "help.transmissions.title": "传动设计工作区",
   "help.transmissions.effect": "设置齿数和模数或节距，再将传动机构及其节圆直径插入当前图层。",
@@ -505,7 +512,8 @@ I18n.register('zh', {
   "help.close.effect": "端点间距在设置的容差内时闭合路径。",
   "help.autoClose.effect": "查找选区中可连接的端点。可延长或缩短路径，也可添加相切圆弧或连接线段。计数器显示开放和闭合路径数量。",
   "help.fillet.effect": "设置半径后单击合适的角点附近。工具用相切圆弧连接两个区段，无法倒圆时以红色提示。",
-  "help.scissors.effect": "单击要移除的区段，或拖动扫过多个区段。修剪在检测到的点或交点处停止。启用重合约束可将新端点与截断它的图形关联。",
+  "help.scissors.effect": "单击要移除的区段，或拖动扫过多个区段。修剪在检测到的点或交点处停止。启用重合约束可将新端点与截断它的图形关联。 默认越过顶点并在交点处停止，包括路径的自交点。关闭后只修剪单击的区段。",
+  "Suivre le tracé jusqu’aux croisements": "沿路径修剪至交点",
   "help.layers.effect": "双击图层名可重命名。拖动手柄可重新排序。在手柄上使用删除（{remove}）时，有路径的图层会提示选择处理方式。右键菜单可将选区复制或移动到其他图层。",
   "help.construction.effect": "绘制前可启用构造线，也可用切换快捷键（{construction}）转换选中区段。图层控制可见性，图层面板控制整体不透明度。",
   "help.precision.effect": "设置网格间距，可分别启用捕捉和自动重合约束。光标旁的图标显示捕捉目标。在兼容工具中按住 {alignment}，可按 15° 对齐。",

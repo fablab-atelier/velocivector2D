@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('pl', {
+  "Déplacer la fenêtre": "Przesuń okno",
+  "Redimensionner la fenêtre": "Zmień rozmiar okna",
+  "Options par défaut des outils": "Domyślne opcje narzędzi",
+  "Grouper": "Grupuj",
+  "Dégrouper": "Rozgrupuj",
+  "help.groups.title": "Grupuj",
+  "help.groups.effect": "Kliknięcie zaznacza grupę warstwy. Zachowane fragmenty pozostają w grupie.",
   "Extensions": "Rozszerzenia",
   "help.transmissions.title": "Warsztat przekładni",
   "help.transmissions.effect": "Ustaw liczby zębów i moduł lub podziałkę, a następnie wstaw przekładnię ze średnicami podziałowymi do aktywnej warstwy.",
@@ -878,7 +885,8 @@ I18n.register('pl', {
   "help.close.effect": "Zamykamy ślady, których punkty końcowe znajdują się w określonej tolerancji przebiegu.",
   "help.autoClose.effect": "Wybór wyciągnięcia lub obcięcia, dodania łuku lub dodawania linii.",
   "help.fillet.effect": "Ustaw promienie i kliknij w pobliżu kompatybilnego rogu. Narzędzie łączy obie części o przeciągu dotykowym i podkreśla nieprawdopodobny filet na czerwonym.",
-  "help.scissors.effect": "Kliknij na część, aby usunąć ją lub prześlizgnij przez kilka części.",
+  "help.scissors.effect": "Kliknij na część, aby usunąć ją lub prześlizgnij przez kilka części. Cięcie przechodzi przez wierzchołki aż do przecięć, także własnych. Wyłącz opcję, aby ciąć tylko wskazany odcinek.",
+  "Suivre le tracé jusqu’aux croisements": "Podążaj za ścieżką do przecięć",
   "help.layers.title": "Zarządzanie warstwą",
   "help.layers.effect": "Kliknij podwójnie na nazwę, aby zmienić nazwę. Przeciągnij ręcznik, aby zmienić położenie warstw. Komanda Usuń ( {remove}) na ręczniku oferuje wybory, jeśli warstwa zawiera ślady. Użyj menu kontekstowego do kopiowania lub przenoszenia wyboru na inną warstwę.",
   "help.construction.effect": "Włącz styl przed rysunkiem lub przełączeniem wybranych części przy użyciu skrótów przełączania ( {construction} ). Kontrola warstwy ustawia widoczność, a panel warstwy kontroluje globalną niejasność.",

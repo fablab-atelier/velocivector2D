@@ -7,6 +7,39 @@ const F=require('./formats.js');
 const line=(id,a,b)=>({id,type:'line',p:[a,b],layer:'0'});
 const assertPoint=(actual,expected)=>assert.ok(G.dist(actual,expected)<1e-8, JSON.stringify({actual,expected}));
 
+test('trimming across polyline vertices removes an alpha loop and leaves both tails',()=>{
+  const alpha={type:'poly',p:[[-2,-2],[2,2],[-2,2],[2,-2]],closed:false};
+  const parts=G.strokeParts(alpha);
+  const stops=index=>parts.flatMap((part,other)=>Math.abs(index-other)>1?
+    E.curveIntersections(parts[index],part).map(t=>({t})):[]);
+  const {cuts,bounds}=E.trimAlong(parts,1,.5,false,stops,()=>true);
+  assert.deepEqual(cuts.map(({index,from,to})=>[index,from,to]),[[0,.5,1],[1,0,1],[2,0,.5]]);
+  bounds.forEach(({q})=>assertPoint(q,[0,0]));
+  const remaining=E.trimContours(alpha,cuts);
+  assert.deepEqual(remaining.map(e=>e.p),[[[-2,-2],[0,0]],[[0,0],[2,-2]]]);
+});
+
+test('a continuous trim crosses the seam of a closed contour and stops at the next intersections',()=>{
+  const parts=G.strokeParts({type:'poly',p:[[0,0],[4,0],[4,4],[0,4]],closed:true});
+  const {cuts}=E.trimAlong(parts,0,.25,true,index=>index===1||index===3?[{t:.5}]:[],()=>true);
+  assert.deepEqual(cuts.map(({index,from,to})=>[index,from,to]),[[3,.5,1],[0,0,1],[1,0,.5]]);
+});
+
+test('an alpha loop ending on its first stroke leaves just the open tail',()=>{
+  const points=[[-6,54.5],[40.25,26],[40.25,-21.75],[-25,-43],[-48.5,-7],[-3,19.25],
+    [18.19811320754716,39.58873023967362]];
+  const path={type:'path',closed:false,segments:points.slice(1).map((q,i)=>line(i+1,points[i],q))};
+  const parts=path.segments;
+  const stops=index=>parts.flatMap((part,other)=>Math.abs(index-other)>1?
+    [...E.curveIntersections(parts[index],part),...E.endpointContacts(parts[index],part,.05)].map(t=>({t})):[])
+    .sort((a,b)=>a.t-b.t);
+  const {cuts}=E.trimAlong(parts,2,.5,false,stops,()=>true);
+  const [tail,...rest]=E.trimContours(path,cuts);
+  assert.equal(rest.length,0);
+  assertPoint(tail.p[0],points[0]);
+  assertPoint(tail.p[1],points.at(-1));
+});
+
 test('dragging a straight edge translates it and reshapes adjacent edges',()=>{
   const poly={id:1,type:'poly',p:[[0,0],[4,0],[4,4]],closed:false};
   const joined=line(2,[4,0],[8,0]);

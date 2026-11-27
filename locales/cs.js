@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('cs', {
+  "Déplacer la fenêtre": "Přesunout okno",
+  "Redimensionner la fenêtre": "Změnit velikost okna",
+  "Options par défaut des outils": "Výchozí možnosti nástrojů",
+  "Grouper": "Seskupit",
+  "Dégrouper": "Zrušit skupinu",
+  "help.groups.title": "Seskupit",
+  "help.groups.effect": "Kliknutím vyberete skupinu vrstvy. Ponechané části zůstanou ve skupině.",
   "Extensions": "Rozšíření",
   "help.transmissions.title": "Dílna převodů",
   "help.transmissions.effect": "Nastavte počty zubů a modul nebo rozteč a vložte převod s roztečnými průměry do aktivní vrstvy.",
@@ -878,7 +885,8 @@ I18n.register('cs', {
   "help.close.effect": "Zavře stopy, jejichž koncové body jsou v rámci stanovené tolerance rozdílů.",
   "help.autoClose.effect": "Vybrajte si prodloužit nebo obřezat, přidat tangentní oblouku nebo přidat řádek.",
   "help.fillet.effect": "Nastavte polomer a klikněte u kompatibilního rohu.",
-  "help.scissors.effect": "Klikněte na část, abyste ji odstranili, nebo prohledejte několik částí.",
+  "help.scissors.effect": "Klikněte na část, abyste ji odstranili, nebo prohledejte několik částí. Řez prochází vrcholy až k průsečíkům včetně vlastních. Vypnutím oříznete jen zvolený úsek.",
+  "Suivre le tracé jusqu’aux croisements": "Sledovat trasu až k průsečíkům",
   "help.layers.title": "Správní složky",
   "help.layers.effect": "Dvojitoklikovat na název, aby se změnil. Vtáhněte rukojmí, abyste přehodnotil vrstvy. Přikázání Smazání ( {remove}) na rukojmí nabízí možnosti, pokud vrstva obsahuje stopy. Použijte kontextní menu k kopírování nebo přesunu výběru na jinou vrstvu.",
   "help.construction.effect": "Vypněte styl před kreslením nebo přepínáním vybraných částí pomocí přepínací skratky ( {construction}). Ovládání vrstvy nastavuje viditelnost a panel vrstvy ovládá globální opačnost.",

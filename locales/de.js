@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('de', {
+  "Déplacer la fenêtre": "Fenster verschieben",
+  "Redimensionner la fenêtre": "Fenstergröße ändern",
+  "Options par défaut des outils": "Standardoptionen der Werkzeuge",
+  "Grouper": "Gruppieren",
+  "Dégrouper": "Gruppierung aufheben",
+  "help.groups.title": "Gruppieren",
+  "help.groups.effect": "Ein Klick wählt die Ebenengruppe aus. Verbleibende Schnittstücke bleiben gruppiert.",
   "Extensions": "Erweiterungen",
   "help.transmissions.title": "Getriebewerkstatt",
   "help.transmissions.effect": "Zähnezahlen und Modul oder Teilung einstellen und das Getriebe samt Teilkreisdurchmessern in die aktive Ebene einfügen.",
@@ -878,7 +885,8 @@ I18n.register('de', {
   "help.close.effect": "Schließt Spuren, deren Endpunkte innerhalb der angegebenen Lückentoleranz liegen.",
   "help.autoClose.effect": "Finden Sie mögliche Verbindungen in der Auswahl. Wählen Sie aus, um zu erweitern oder zu trimmen, fügen Sie einen Tangentenbogen hinzu, oder fügen Sie eine Linie hinzu.",
   "help.fillet.effect": "Setzen Sie den Radius und klicken Sie in der Nähe einer kompatiblen Ecke. Das Werkzeug verbindet die beiden Teile mit einem tangenten Bogen und hebt ein unmögliches Filet in rot hervor.",
-  "help.scissors.effect": "Klicken Sie auf einen Teil, um ihn zu entfernen, oder durchschauen Sie mehrere Teile. Das Trimmen hört an erkannten Punkten und Kreuzungen auf.",
+  "help.scissors.effect": "Klicken Sie auf einen Teil, um ihn zu entfernen, oder durchschauen Sie mehrere Teile. Das Trimmen hört an erkannten Punkten und Kreuzungen auf. Der Schnitt läuft über Stützpunkte bis zu Kreuzungen, auch Selbstkreuzungen. Deaktiviere die Option für den angeklickten Abschnitt.",
+  "Suivre le tracé jusqu’aux croisements": "Pfad bis zu Kreuzungen verfolgen",
   "help.layers.title": "Schichtmanagement",
   "help.layers.effect": "Doppelklicken Sie auf den Namen, um ihn umzubenennen. Ziehen Sie den Griff, um Schichten neu zu ordnen. Der Befehl \" löschen \" ( {remove}) auf dem Griff bietet Optionen, wenn die Schicht Spuren enthält. Verwenden Sie das Kontextmenü, um die Auswahl zu kopieren oder auf eine andere Schicht zu verschieben.",
   "help.construction.effect": "Aktivieren Sie den Stil, bevor Sie ausgewählte Teile mit der Schaltverknüpfung ( {construction}) zeichnen oder wechseln.",

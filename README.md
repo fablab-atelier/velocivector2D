@@ -8,9 +8,13 @@ Sous Windows, double-cliquer sur **Lancer.cmd** pour ouvrir l’application dans
 
 Le catalogue de chaque langue couvre les menus, champs, infobulles, messages et fiches d’aide. Les traductions complémentaires ont été préparées hors ligne et se chargent à la demande. Les consignes de traduction pour les prochains outils figurent dans `AGENTS.md`.
 
+Dans **Fichier → Préférences → Options par défaut des outils**, personnalisez les réglages de départ des outils et des ateliers. Les réglages sont mémorisés localement. Chaque outil peut être ramené aux réglages d’usine avec **Par défaut**, et **Tout par défaut** réinitialise la rubrique entière.
+
+Les extensions gèrent leur langue et leurs valeurs de départ dans l’onglet **Préférences** de leur propre fenêtre.
+
 ## Extensions
 
-Sous Windows, `Lancer.cmd` détecte les dossiers `plugins/<id>/` contenant un fichier `plugin.js`. Le menu **Extensions** donne accès aux ateliers, dont l’**Atelier de transmissions**. [Guide de l’API pour les développeurs](plugins/README.md) · [Contrat compact pour les agents](plugins/API-AGENT.md)
+Sous Windows, `Lancer.cmd` détecte les dossiers `plugins/<id>/` contenant un fichier `plugin.js`. Le menu **Extensions** donne accès à **Atelier engrenage** et **Atelier poulie et courroie**. [Guide de l’API pour les développeurs](plugins/README.md) · [Contrat compact pour les agents](plugins/API-AGENT.md)
 
 ## Tracer une première pièce
 

@@ -1,5 +1,11 @@
 'use strict';
 const englishMessages=Object.freeze({
+  "Déplacer la fenêtre": "Move window",
+  "Redimensionner la fenêtre": "Resize window",
+  "Options par défaut des outils": "Default tool options",
+  "Suivre le tracé jusqu’aux croisements": "Follow the path to crossings",
+  "Grouper": "Group",
+  "Dégrouper": "Ungroup",
   "Extensions": "Extensions",
   " % de réduction": "% reduction",
   " + clic": " + click",

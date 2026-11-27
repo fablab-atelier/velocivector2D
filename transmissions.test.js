@@ -3,7 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const G=require('./geometry.js');
 const Formal=require('./constraints.js');
-const Transmissions=require('./plugins/transmissions/plugin.js');
+const Transmissions=require('./plugins/transmission-core.js');
 const defaults={module:2,pressure:20,pitch:2,distance:55,planets:3};
 
 test('each layout produces valid geometry and satisfied primitive references',()=>{
@@ -32,4 +32,24 @@ test('series, planetary and GT2 layouts calculate their pitch dimensions and spe
   assert.equal(belt.beltLength,150);
   assert.throws(()=>Transmissions.build({...defaults,planets:5,mode:'planetary',teeth:[24,18]}),/planetError/);
   assert.throws(()=>Transmissions.build({...defaults,distance:2,mode:'belt',teeth:[20,40]}),/spacing/);
+});
+
+test('the open belt pitch perimeter drives center distance and each component gets its own group',()=>{
+  const options={...defaults,mode:'belt',teeth:[20,40],pitch:2,length:180};
+  const result=Transmissions.build(options);
+  assert.ok(Math.abs(result.beltLength-180)<1e-9);
+  assert.ok(result.distance>55);
+  assert.deepEqual(result.entities.map(e=>e.vectorGroup),['profile0','profile0','profile1','profile1','belt']);
+  assert.throws(()=>Transmissions.build({...options,length:181}),/pitchLengthError/);
+});
+
+test('belt length rounds to the nearest complete pitch and resolves exact ties downward',()=>{
+  const round=Transmissions.nearestPitchLength;
+  assert.equal(round(181,2),180);
+  assert.equal(round(181.01,2),182);
+  assert.equal(round(180.99,2),180);
+  assert.equal(round(181.25,2.5),180);
+  assert.equal(round(36*5.08,5.08),182.88);
+  assert.equal(round(36.5*5.08,5.08),182.88);
+  assert.equal(round(36.51*5.08,5.08),187.96);
 });

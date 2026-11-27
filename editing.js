@@ -78,7 +78,7 @@ const createEdit=()=>{
     for(const a of endpoints) {
       seen.add(a);
       for(const b of nearby(a.q)) {
-        if(a===b||!seen.has(b)||a.entity.layer!==b.entity.layer) continue;
+        if(a===b||!seen.has(b)||a.entity.layer!==b.entity.layer||a.entity.vectorGroup!==b.entity.vectorGroup) continue;
         if(a.entity===b.entity&&a.entity.type==='line') continue;
         const gap=g.dist(a.q,b.q);
         if(gap<=maximum+g.eps) pairs.push({a,b,gap,target:g.mid(a.q,b.q)});
@@ -228,7 +228,8 @@ const createEdit=()=>{
       if(connector) {
         const styled=g.withConstruction(connector,g.constructionAt(a.entity,a.index)===g.constructionAt(b.entity,b.index)?
           g.constructionAt(a.entity,a.index):null);
-        const entity=identify({...styled,layer:a.entity.layer});
+        const entity=identify({...styled,layer:a.entity.layer,
+          ...(a.entity.vectorGroup?{vectorGroup:a.entity.vectorGroup}:{})});
         connectors.push(entity);
         attachments.push({connector:entity,refs:[a,b].map(end=>({id:end.entity.id,kind:'edge',index:end.index}))});
       }
@@ -270,7 +271,7 @@ const createEdit=()=>{
     function candidates(entity,point) {
       const matches=[];
       for(const other of active.values()) {
-        if(other===entity||other.layer!==entity.layer) continue;
+        if(other===entity||other.layer!==entity.layer||other.vectorGroup!==entity.vectorGroup) continue;
         const info=view(other);
         if(!info) continue;
         info.points.forEach((p,end)=>{if(same(p,point)) matches.push({other,end,p});});
@@ -288,6 +289,7 @@ const createEdit=()=>{
         }
       }
       const result={type:'path',id:entity.id,layer:entity.layer,segments,closed};
+      if(entity.vectorGroup) result.vectorGroup=entity.vectorGroup;
       if(Object.keys(constructionParts).length) result.constructionParts=constructionParts;
       return result;
     }
@@ -457,6 +459,47 @@ const createEdit=()=>{
     if(cyclic&&!stops.length) return [0,1];
     const before=stops.findLast(t=>t<=position), after=stops.find(t=>t>position);
     return [before??(cyclic?stops.at(-1)-1:0),after??(cyclic?stops[0]+1:1)];
+  }
+  function trimAlong(parts,index,t,closed,stops,visible) {
+    const count=parts.length;
+    const at=i=>((i%count)+count)%count;
+    function limit(direction) {
+      let last={position:index+t};
+      for(let step=0;step<=count;step++) {
+        const i=index+direction*step, part=at(i);
+        if((!closed&&(i<0||i>=count))||!visible(part)) break;
+        const cursor=step?(direction<0?1:0):t;
+        const candidates=stops(part);
+        const stop=direction<0?candidates.findLast(item=>item.t<=cursor):
+          candidates.find(item=>step?item.t>=cursor:item.t>cursor);
+        if(stop) return {position:i+stop.t,ref:stop.ref};
+        last={position:i+(direction<0?0:1)};
+      }
+      return last;
+    }
+    let lo=limit(-1), hi=limit(1);
+    if(closed&&hi.position-lo.position>count) {
+      lo={position:0};hi={position:count};
+    }
+    const cuts=[];
+    for(let i=Math.floor(lo.position);i<hi.position;i++) {
+      const from=Math.max(0,lo.position-i), to=Math.min(1,hi.position-i);
+      if(to-from>1e-8) cuts.push({index:at(i),from,to,part:parts[at(i)]});
+    }
+    const bounds=cuts.length?[{q:g.traceAt(cuts[0].part,cuts[0].from),ref:lo.ref},
+      {q:g.traceAt(cuts.at(-1).part,cuts.at(-1).to),ref:hi.ref}]:[];
+    return {cuts,bounds};
+  }
+
+  function endpointContacts(a,b,tolerance) {
+    const project=(point,part)=>{
+      const location=g.traceLocation(part,point);
+      return location&&g.dist(location.q,point)<=tolerance+g.eps?location:null;
+    };
+    return [
+      ...ends(b).map(point=>project(point,a)?.t),
+      ...ends(a).map((point,index)=>project(point,b)?index:undefined)
+    ].filter(t=>t!==undefined);
   }
 
   function crossingNear(a,b,p,tolerance) {
@@ -663,7 +706,7 @@ const createEdit=()=>{
     return changedVertices(entities,points.map(p=>[p,g.add(p,shift)]));
   }
 
-  return {bearing,edges,ends,filletLines,contour,isClosed,closurePairs,closeConnections,joinContours,removeSegments,crossingParts,selectedRuns,transformParts,trimContours,trimBounds,trimInterval,curveIntersections,offsetTrace,valid,translationVertices,changedVertices,drag};
+  return {bearing,edges,ends,filletLines,contour,isClosed,closurePairs,closeConnections,joinContours,removeSegments,crossingParts,selectedRuns,transformParts,trimContours,trimBounds,trimAlong,trimInterval,curveIntersections,endpointContacts,offsetTrace,valid,translationVertices,changedVertices,drag};
 };
 const Edit=createEdit();
 if(typeof module!=='undefined') module.exports=Edit;

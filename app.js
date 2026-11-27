@@ -21,6 +21,7 @@ const definitions = {
 const shortcutCatalog={
   'Fichier':{save:['Enregistrer','Ctrl+s'],saveAs:['Enregistrer sous','Ctrl+Maj+s'],open:['Ouvrir','Ctrl+o']},
   'Édition':{copy:['Copier','Ctrl+c'],cut:['Couper','Ctrl+x'],paste:['Coller','Ctrl+v'],undo:['Annuler','Ctrl+z'],
+    group:['Grouper','Ctrl+g'],ungroup:['Dégrouper','Ctrl+Maj+g'],
     redo:['Rétablir','Ctrl+y'],redoAlternate:['Rétablir (second raccourci)','Ctrl+Maj+z'],remove:['Supprimer','Delete'],selectLayer:['Sélectionner les tracés du calque actif','Ctrl+a'],construction:['Basculer le trait de construction','x']},
   'Contraintes':{
     'constraint:horizontal':['Horizontale','Maj+h'],'constraint:vertical':['Verticale','Maj+v'],
@@ -481,13 +482,43 @@ function referencePointVisible(e,index,p) {
   const center=Formal.theoreticalReferences(e).find(entry=>entry.index===index);
   return center?center.part===undefined||!G.constructionAt(e,center.part):visiblePoint(e,p);
 }
-const selected = () => doc.entities.filter(e=>selection.has(e.id)&&visible(e));
+const selected = () => doc.entities.filter(e=>selection.has(e.id)&&
+  (visible(e)||e.vectorGroup&&doc.layers.some(layer=>layer.name===e.layer&&layer.visible)));
 const num = x => Number(x.toFixed(5)).toLocaleString(I18n.locale,{maximumFractionDigits:5});
 const message = text => { $('status').textContent=text; };
 const screen = p => [viewport[0]/2+(p[0]-camera.x)*camera.scale,viewport[1]/2-(p[1]-camera.y)*camera.scale];
 const world = p => [camera.x+(p[0]-viewport[0]/2)/camera.scale,camera.y-(p[1]-viewport[1]/2)/camera.scale];
 const mouse = e => {const r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];};
 const identity = e => ({...e,id:nextId++});
+const newVectorGroup=()=>[...crypto.getRandomValues(new Uint32Array(4))].map(n=>n.toString(16).padStart(8,'0')).join('');
+const vectorGroupKey=e=>e?.vectorGroup?JSON.stringify([e.layer,e.vectorGroup]):null;
+function copiedVectorGroup(entity,groups) {
+  const key=vectorGroupKey(entity);
+  if(!key) return {};
+  if(!groups.has(key)) groups.set(key,newVectorGroup());
+  return {vectorGroup:groups.get(key)};
+}
+function groupedIds(ids) {
+  const result=new Set(ids), groups=new Set();
+  for(const entity of doc.entities) if(result.has(entity.id)&&entity.vectorGroup) groups.add(vectorGroupKey(entity));
+  if(groups.size) for(const entity of doc.entities) if(groups.has(vectorGroupKey(entity))) result.add(entity.id);
+  return [...result];
+}
+function groupVectors(group) {
+  const ids=new Set(groupedIds([...selection]));
+  const layers=new Map();
+  for(const entity of doc.entities) if(ids.has(entity.id)) layers.set(entity.layer,(layers.get(entity.layer)??0)+1);
+  const keys=new Map([...layers].filter(([,count])=>count>1).map(([layer])=>[layer,newVectorGroup()]));
+  const changes=doc.entities.some(e=>ids.has(e.id)&&(group?keys.has(e.layer):e.vectorGroup));
+  if(!changes) return;
+  segmentSelection.clear();
+  commit(d=>({...d,entities:d.entities.map(e=>{
+    if(!ids.has(e.id)||group&&!keys.has(e.layer)) return e;
+    const {vectorGroup,...rest}=e;
+    return group?{...rest,vectorGroup:keys.get(e.layer)}:rest;
+  })}),false,false,true);
+  pick([...ids],{});
+}
 
 function requestDraw() {
   if(!pending) {pending=true;requestAnimationFrame(draw);}
@@ -662,6 +693,12 @@ function choose(id) {
   selectedDimension=null;selectedConstraint=null;selectedOrigin=null;
   $('angleContext').hidden=true;
   tool=id;points=[];segments=[];draftAxes=[];draftRelations=[];draftConstruction=[];slotAxis=null;arcMode=false;arcTrack=null;marker=null;activeSnap=null;
+  if(id==='polygon') applyToolDefaults(['sides']);
+  if(id==='slot') applyToolDefaults(['overall']);
+  if(id==='offset') applyToolDefaults(defaultOffsetFields);
+  if(id==='dimension') applyToolDefaults(['linearDimensionMode']);
+  if(id==='bezier'&&applyToolDefaults(['splineTension'])) splineTension=$('splineTension').valueAsNumber/100;
+  if(id==='text'&&!textSelection) applyToolDefaults(defaultTextFields);
   knotFocus=null;
   if(id!=='select') {edgeFocus=null;wholeFocus=null;}
   if(polylineTool()) {
@@ -865,6 +902,7 @@ function segmentAt(entity,position) {
   return best;
 }
 function selectSegment(entity,position,mod={}) {
+  if(entity?.vectorGroup) {pick([entity.id],mod);return;}
   const index=segmentAt(entity,position);
   if(index===null) {
     if(!mod.shiftKey&&!mod.ctrlKey) segmentSelection.clear();
@@ -1595,7 +1633,8 @@ $('textOptions').oninput=()=>{
   updateTextPanel();requestDraw();
 };
 $('newCadText').onclick=()=>{
-  textDraft=null;textPicking=null;$('cadTextContent').value='';$('cadTextContent').focus();update();
+  textDraft=null;textPicking=null;$('cadTextContent').value='';applyToolDefaults(defaultTextFields);
+  $('cadTextContent').focus();update();
 };
 $('pickCadTextPath').onclick=()=>{
   textPicking='path';updateTextPanel();message(I18n.t('Cliquez sur la courbe qui doit supporter le texte.'));
@@ -1877,10 +1916,10 @@ function draw() {
     stroke(drag.points,ink.point,2,[4,3]);
   } else if(modification?.type==='scissors'&&cursorPoint) {
     const target=scissorsTarget(cursorPoint);
-    if(target&&target.to-target.from>1e-8) {
-      const fragment=Edit.trimInterval(target.part,target.from,target.to);
-      drawEntity(fragment,ink.point,3);
-      for(const t of [target.from,target.to]) drawKnotSquare(screen(G.traceAt(target.part,t)),ink,3,ink.point);
+    if(target) {
+      for(const cut of target.cuts??[target]) if(cut.to-cut.from>1e-8)
+        drawEntity(Edit.trimInterval(cut.part,cut.from,cut.to),ink.point,3);
+      for(const {q} of target.bounds) drawKnotSquare(screen(q),ink,3,ink.point);
     }
   }
   if(!drag&&cursorPoint&&automaticGesture(cursorPoint)?.type==='scale') {
@@ -2505,7 +2544,8 @@ function replaceSelected(fn,join=true,rebind=false,removedSegments,bindCut=null,
   let entities=doc.entities.flatMap(e=>{
     if(!picked.has(e.id)) return [e];
     const parts=fn(e).map((part,i)=>{
-      const next=i===0?(part===e?e:{...part,id:e.id,layer:e.layer}):identity({...part,layer:e.layer});
+      const metadata={layer:e.layer,...(e.vectorGroup?{vectorGroup:e.vectorGroup}:{})};
+      const next=i===0?(part===e?e:{...part,...metadata,id:e.id}):identity({...part,...metadata});
       updated.push(next.id);
       if(!selectedOutput||selectedOutput(e,i)) chosen.push(next.id);
       return next;
@@ -2590,7 +2630,7 @@ function operate(type) {
     return;
   }
   if(type==='transform') {
-    if(!modification?.transform||modification.protected) openTransformation('auto',false);
+    if(!modification?.transform||modification.protected) openTransformation(toolDefault('transformModeDefault','auto'),false);
     return;
   }
   if(modification?.type===type) return;
@@ -2603,6 +2643,7 @@ function operate(type) {
   $('rotateValue').value=0;$('scaleValue').value=1;$('scaleY').value=1;$('mirrorHorizontal').checked=true;
   $('moveMode').value='relative';$('moveX').value=0;$('moveY').value=0;
   $('mirrorCopy').checked=false;$('scaleDimensions').checked=true;
+  applyModificationDefaults(type);
   $('options').hidden=false;
   update();
 }
@@ -2623,6 +2664,7 @@ function openTransformation(mode,protectRelations) {
   $('moveX').value=$('moveY').value=$('rotateValue').value=0;
   $('scaleValue').value=$('scaleY').value=1;
   $('scaleDimensions').checked=true;
+  applyModificationDefaults(type);
   $('options').hidden=false;
   update();
 }
@@ -2916,7 +2958,7 @@ function updateCanvasCursor() {
   if(css!==cursorPositionKey) {canvas.style.cursor=css;cursorPositionKey=css;}
 }
 function pickRotationGroup(entity,mod) {
-  if(mod.ctrlKey||mod.shiftKey) {pick([entity.id],mod);return;}
+  if(entity.vectorGroup||mod.ctrlKey||mod.shiftKey) {pick([entity.id],mod);return;}
   const visibleObjects=doc.entities.filter(visible);
   const endpoints=visibleObjects.map(e=>({id:e.id,points:Edit.contour(e)?.points??Formal.vertices(e)}));
   const coincident=(doc.constraints??[]).filter(c=>c.type==='coincident'&&!Formal.isPointOnTrace(c));
@@ -3192,10 +3234,11 @@ function commitTransform(tf,type,withoutSnap,axes=[]) {
   const source=snapshot?.entities??selectedItems;
   const ids=new Map(), before=new Map(doc.entities.map(e=>[e.id,e]));
   if(snapshot) for(const e of source) before.set(e.id,e);
+  const groups=new Map();
   const transformed=source.map(e=>{
     const moved=copy?transformModification(e,tf):transformSelection(e,tf);
     if(!moved) return null;
-    const result=copy?identity(moved):moved;
+    const result=copy?identity({...moved,...copiedVectorGroup(e,groups)}):moved;
     ids.set(e.id,result.id);return result;
   });
   if(transformed.some(e=>!e||!G.serial(e)||!Edit.valid(e))) {message(I18n.t('Transformation hors limites.'));return false;}
@@ -3411,9 +3454,9 @@ function pasteGeometry() {
   const n=clipboard.pastes+1;
   const delta=[12*n/camera.scale,-12*n/camera.scale];
   const map=p=>G.add(p,delta), tf={map,factor:1};
-  const ids=new Map(), before=new Map(clipboard.entities.map(e=>[e.id,e]));
+  const ids=new Map(), groups=new Map(), before=new Map(clipboard.entities.map(e=>[e.id,e]));
   const added=clipboard.entities.map(e=>{
-    const next=identity({...G.transform(e,map),layer:activeLayer});
+    const next=identity({...G.transform(e,map),layer:activeLayer,...copiedVectorGroup(e,groups)});
     ids.set(e.id,next.id);return next;
   });
   if(added.some(e=>!G.serial(e))) {message(I18n.t('Collage hors limites.'));return;}
@@ -3484,6 +3527,7 @@ function fit() {
   requestDraw();
 }
 function pick(ids,mod,parts=new Map(),refs=[]) {
+  ids=groupedIds(ids);
   selectedOrigin=null;
   edgeFocus=null;
   wholeFocus=null;
@@ -3493,7 +3537,7 @@ function pick(ids,mod,parts=new Map(),refs=[]) {
   if(!mod.shiftKey&&!mod.ctrlKey) {formalSelection=[];clipboardRelations.clear();}
   if(!mod.shiftKey && !mod.ctrlKey) selection.clear();
   for(const id of ids) {
-    const touched=parts.get(id), previous=segmentSelection.get(id);
+    const touched=doc.entities.find(e=>e.id===id)?.vectorGroup?null:parts.get(id), previous=segmentSelection.get(id);
     if(touched&&mod.ctrlKey) {
       if(!selection.has(id)) continue;
       const entity=doc.entities.find(e=>e.id===id);
@@ -3527,7 +3571,7 @@ function curveKnots(entity) {
 function focusedKnot() {
   if(tool!=='select'||!knotFocus||!selection.has(knotFocus.id)) return null;
   const entity=doc.entities.find(e=>e.id===knotFocus.id), {index}=knotFocus;
-  return visible(entity)&&curveKnots(entity).some(knot=>knot.index===index)?{entity,index}:null;
+  return visible(entity)&&(!entity.vectorGroup||freeTranslation())&&curveKnots(entity).some(knot=>knot.index===index)?{entity,index}:null;
 }
 function knotAt(position) {
   let best=null, radius=7;
@@ -4065,7 +4109,8 @@ function applyFillet(position) {
   const arcStyle=styles[0]===styles[1]?styles[0]:null;
   function rebuild(entity,updated,insert=false) {
     const source=Formal.referenceEdges(entity);
-    if(source.length===1&&!insert) return {...updated.get(0),id:entity.id,layer:entity.layer};
+    if(source.length===1&&!insert) return {...updated.get(0),id:entity.id,layer:entity.layer,
+      ...(entity.vectorGroup?{vectorGroup:entity.vectorGroup}:{})};
     const {p,segments,construction,constructionParts,profile,...rest}=entity;
     const parts=[], marks=[];
     for(const [index,part] of source.entries()) {
@@ -4082,7 +4127,8 @@ function applyFillet(position) {
   }
   if(same) replacements.set(first.entity.id,rebuild(first.entity,new Map([[first.index,lines[0]],[second.index,lines[1]]]),true));
   else sides.forEach(({entity,index},i)=>replacements.set(entity.id,rebuild(entity,new Map([[index,lines[i]]]))));
-  const connector=same?null:identity(G.withConstruction({...arc,layer:first.entity.layer},arcStyle));
+  const group=first.entity.vectorGroup===second.entity.vectorGroup?first.entity.vectorGroup:null;
+  const connector=same?null:identity(G.withConstruction({...arc,layer:first.entity.layer,...(group?{vectorGroup:group}:{})},arcStyle));
   const entities=before.map(entity=>replacements.get(entity.id)??entity);
   if(connector) entities.push(connector);
   if([...replacements.values(),...(connector?[connector]:[])].some(entity=>!G.serial(entity)||!Edit.valid(entity))) {
@@ -4149,29 +4195,54 @@ function scissorsTarget(position) {
   return best?scissorsInterval(best,tolerance):null;
 }
 function scissorsInterval(best,tolerance) {
+  const parts=scissorsParts(best.entity);
+  if($('scissorsAlong').checked&&parts.length>1) {
+    const result=Edit.trimAlong(parts,best.index,best.t,Boolean(best.entity.closed),index=>
+      scissorsStops({...best,index,part:parts[index]},tolerance,true),
+      index=>constructionShown(best.entity.layer)||!G.constructionAt(best.entity,index));
+    return {...best,...result};
+  }
+  const cyclic=best.part.s===undefined&&['circle','ellipse'].includes(best.part.type);
+  const unique=scissorsStops(best,tolerance,false);
+  const [from,to]=Edit.trimBounds(best.t,unique.map(stop=>stop.t),cyclic);
+  const bounds=[from,to].map(t=>{
+    const parameter=cyclic?(t%1+1)%1:t;
+    return {q:G.traceAt(best.part,t),ref:unique.find(stop=>Math.abs(stop.t-parameter)<=1e-7)?.ref};
+  });
+  return {...best,from,to,bounds};
+}
+function scissorsStops(best,tolerance,along) {
   let cache=modification.scissorsBoundaries;
   if(cache?.doc!==doc||cache.tolerance!==tolerance) {
     cache={doc,tolerance,byStroke:new Map()};
     modification.scissorsBoundaries=cache;
   }
-  const key=best.entity.id+'/'+best.index;
+  const key=best.entity.id+'/'+best.index+'/'+along;
   let stops=cache.byStroke.get(key);
   if(!stops) {
     stops=[];
     for(const e of doc.entities) if(visible(e)) {
       const vertices=Formal.vertices(e);
       const count=e.type==='arc'?2:['circle','ellipse'].includes(e.type)&&e.s===undefined?0:vertices.length;
-      for(let index=0;index<count;index++) {
+      for(let index=0;index<count&&(!along||e!==best.entity);index++) {
         const vertex=vertices[index];
         if(!visiblePoint(e,vertex)) continue;
         const location=G.traceLocation(best.part,vertex);
         if(location&&G.dist(location.q,vertex)<=tolerance+G.eps)
           stops.push({t:location.t,ref:{id:e.id,kind:'point',index},gap:G.dist(location.q,vertex)});
       }
-      for(const [i,part] of scissorsParts(e).entries()) {
+      const parts=scissorsParts(e);
+      for(const [i,part] of parts.entries()) {
         if(e===best.entity&&i===best.index||!constructionShown(e.layer)&&G.constructionAt(e,i)) continue;
-        for(const t of Edit.curveIntersections(best.part,part))
+        const adjacent=along&&e===best.entity&&(Math.abs(i-best.index)===1||
+          e.closed&&Math.abs(i-best.index)===parts.length-1);
+        const crossings=Edit.curveIntersections(best.part,part);
+        if(along&&e===best.entity&&!adjacent)
+          crossings.push(...Edit.endpointContacts(best.part,part,tolerance));
+        for(const t of crossings) {
+          if(adjacent&&(t<=1e-7||t>=1-1e-7)) continue;
           stops.push({t,ref:{id:e.id,kind:'edge',index:i},gap:0});
+        }
       }
     }
     cache.byStroke.set(key,stops);
@@ -4188,13 +4259,7 @@ function scissorsInterval(best,tolerance) {
       unique[unique.length-1]=stop;
     }
   }
-  const [from,to]=Edit.trimBounds(best.t,unique.map(stop=>stop.t),cyclic);
-  const bounds=[from,to].map(t=>{
-    const parameter=cyclic?(t%1+1)%1:t;
-    const stop=unique.find(stop=>Math.abs(stop.t-parameter)<=1e-7);
-    return {q:G.traceAt(best.part,t),ref:stop?.ref};
-  });
-  return {...best,from,to,bounds};
+  return unique;
 }
 function bindScissorsCoincidences(target,before,entities,constraints,remap,updated) {
   const ids=new Set(updated), signatures=new Set(constraints.map(Formal.signature));
@@ -4212,6 +4277,14 @@ function bindScissorsCoincidences(target,before,entities,constraints,remap,updat
         if(G.dist(point,q)<=1e-7) endpoints.push({id:e.id,kind:'point',index});
     }
     if(!endpoints.length) continue;
+    if(target.cuts&&ref.id===target.entity.id&&endpoints.length===2) {
+      const coincidence=Formal.make('coincident',endpoints,entities);
+      if(coincidence) {
+        const signature=Formal.signature(coincidence);
+        if(!signatures.has(signature)) {signatures.add(signature);constraints.push(coincidence);added++;}
+        continue;
+      }
+    }
     const support=remap.has(ref.id)?Formal.remapReference(before,previous,remap,ref):ref;
     if(!support) {skipped++;continue;}
     for(const endpoint of endpoints) {
@@ -4254,7 +4327,7 @@ function scissorsSweep(points) {
         }
         for(const t of hits) {
           const cut=scissorsInterval({entity,index,part,t,q:G.traceAt(part,t)},tolerance);
-          const key=[entity.id,index,cut.from,cut.to].join('/');
+          const key=entity.id+'/'+(cut.cuts??[cut]).map(part=>[part.index,part.from,part.to].join(':')).join('/');
           cuts.set(key,cut);
         }
       }
@@ -4265,9 +4338,11 @@ function scissorsSweep(points) {
 function applyScissorsCuts(targets) {
   const cuts=new Map();
   for(const target of targets) {
-    if(!target||target.to-target.from<=1e-8) continue;
+    if(!target) continue;
+    const portions=(target.cuts??[target]).filter(cut=>cut.to-cut.from>1e-8);
+    if(!portions.length) continue;
     if(!cuts.has(target.entity.id)) cuts.set(target.entity.id,[]);
-    cuts.get(target.entity.id).push(target);
+    cuts.get(target.entity.id).push(...portions);
   }
   if(!cuts.size) {message(I18n.t('Aucune portion de tracé à couper.'));return;}
   pick([...cuts.keys()],{});
@@ -4281,7 +4356,7 @@ function applyScissorsCuts(targets) {
     }
     return entities;
   }:null;
-  if(replaceSelected(entity=>Edit.trimContours(entity,cuts.get(entity.id)),false,true,undefined,bind)) {
+  if(replaceSelected(entity=>cuts.has(entity.id)?Edit.trimContours(entity,cuts.get(entity.id)):[entity],false,true,undefined,bind)) {
     const lost=removalBatches.at(-1);
     let status=I18n.t('Coupe appliquée.');
     if(added) status+=' '+added+I18n.t(' coïncidence(s) ajoutée(s).');
@@ -4372,7 +4447,7 @@ canvas.addEventListener('pointerdown',e=>{
     const previewObject=modification.type==='rotate'&&!modification.applied&&tf&&tf.rotation!==0&&modificationItems().find(e=>
       hitsEntity(transformModification(e,tf),position));
     const object=previewObject||hit(position)[0];
-    if(modification.type==='explode'&&object&&!G.strokeParts(object).length&&
+    if(modification.type==='explode'&&object&&!object.vectorGroup&&!G.strokeParts(object).length&&
       !mod.ctrlKey&&!mod.shiftKey&&!mod.altKey) {
       drag={kind:'move',start,items:[object],explodeMove:true,id:e.pointerId};
       return;
@@ -4442,8 +4517,10 @@ canvas.addEventListener('pointerdown',e=>{
     if((!mod.shiftKey||anchor||hit(position).length||mod.ctrlKey)&&!mod.altKey) {
       const hits=hit(position);
       const object=hits.find(e=>selectedTraceHit(e,position))??hits[snapIndex%hits.length];
-      const moving=anchor||selectedTraceHit(object,position)?items:object&&!segmentSelection.has(object.id)?[object]:[];
-      const resize=moving.length===1&&isRadialRim(object,position)&&radialCenterConstrained(object);
+      const related=object?new Set(groupedIds([object.id])):null;
+      const moving=anchor||selectedTraceHit(object,position)?items:object&&!segmentSelection.has(object.id)?
+        doc.entities.filter(e=>related.has(e.id)):[];
+      const resize=moving.length===1&&!object?.vectorGroup&&isRadialRim(object,position)&&radialCenterConstrained(object);
       const group=resize?radialResizeDrag(object,start,e.pointerId):moving.length?{kind:'move',start,items:moving,anchor,
         anchorCenter:anchor&&selectionFrame(items).center,keepGroup:true,id:e.pointerId}:null;
       const box={kind:'box',start,object,id:e.pointerId};
@@ -4455,7 +4532,7 @@ canvas.addEventListener('pointerdown',e=>{
     }
     if(direct&&mod.altKey) {
       const target=knotAt(start);
-      if(target) {
+      if(target&&(!target.entity.vectorGroup||freeTranslation())) {
         pick([target.entity.id],{});
         knotFocus={id:target.entity.id,index:target.index};
         drag={kind:'splineKnot',start,origin:position,knot:target,defer:Boolean(contourDragMode(target.entity)),id:e.pointerId};
@@ -4468,6 +4545,11 @@ canvas.addEventListener('pointerdown',e=>{
     const candidates=handle?[]:hit(position);
     const object=handle?.e??candidates[snapIndex%candidates.length];
     if(object && direct && mod.altKey) {
+      if(object.vectorGroup&&!freeTranslation()) {
+        pick([object.id],mod);
+        drag={kind:'move',start,items:selected(),keepGroup:true,id:e.pointerId};
+        return;
+      }
       const preferredIndex=edgeFocus?.id===object.id?edgeFocus.index:undefined;
       if(!selection.has(object.id)) pick([object.id],mod);
       const target=handle??(selection.size===1&&wholeFocus!==object.id?edgeAt(object,position):null);
@@ -4508,6 +4590,7 @@ function radialResizeDrag(entity,start,id) {
   return {kind:'radialResize',start,id,entity,items:[entity],keepGroup:true};
 }
 function localSelectionDrag(group,object) {
+  if(object?.vectorGroup&&!freeTranslation()) return group;
   const {start,id}=group, position=world(start);
   if(object?.type==='arc') {
     const index=Edit.ends(object).findIndex(q=>G.dist(q,position)<=Math.min(7/camera.scale,object.r/2));
@@ -4880,7 +4963,11 @@ function load(data,name,changed=false) {
   finishInlineText(false);textSelection=null;
   undo=[];redo=[];selection.clear();segmentSelection.clear();points=[];choose('select');update();fit();
 }
-menuAction($('new'),()=>{if(canReplace()){load(Formats.empty(),'dessin');message(I18n.t('Nouveau dessin.'));}});
+menuAction($('new'),()=>{if(canReplace()){
+  const drawing=Formats.empty();
+  drawing.units=Number(toolDefault('units',drawing.units));
+  load(drawing,'dessin');message(I18n.t('Nouveau dessin.'));
+}});
 menuAction($('open'),()=>$('file').click());
 menuAction($('import'),()=>$('vectorFile').click());
 menuAction($('importRaster'),()=>$('rasterFile').click());
@@ -5111,6 +5198,7 @@ $('rasterFile').onchange=async event=>{
     rasterImport={file:payload,url,bitmap,previous,width,height,original,view:{zoom:1,center:[.5,.5]},colors:[],erase:[],shape:{},action:null,points:[],pointer:null,busy:false,frame:null,picking:false,cancelRender:null};
     url=null;
     resetRasterImportSettings();
+    applyToolDefaults(Object.keys(rasterImportDefaults));
     drawRasterColorList();
     setRasterWorkshopAction();
     $('rasterImportInfo').value=file.name+' · '+width+' × '+height+' px';
@@ -5252,7 +5340,10 @@ function addRasterImport(source,width,height) {
   while(!canCreateLayer('Image '+index)&&index<Number.MAX_SAFE_INTEGER) index++;
   if(index>=Number.MAX_SAFE_INTEGER) throw Error('Numérotation des images épuisée.');
   const name='Image '+index;
-  const raster={...rasterDefaults,source,width,height,center:[camera.x,camera.y],
+  const raster={...rasterDefaults,angle:Number(toolDefault('rasterAngle',0)),
+    scale:(Number(toolDefault('rasterScale',100))||100)/100,
+    activeOpacity:Number(toolDefault('rasterActiveOpacity',80)),inactiveOpacity:Number(toolDefault('rasterInactiveOpacity',35)),
+    source,width,height,center:[camera.x,camera.y],
     pixelSize:(25.4/96)/Formats.millimeters[doc.units]};
   if(!Formats.validRasterPlacement(raster)) throw Error('Réglages de l’image hors limites.');
   const fields=captureCoordinateFields();
@@ -5422,6 +5513,8 @@ function openImportWorkshop(name,{doc:source,skipped,unitKnown,sampledSplines=0}
     ...[...new Set(entities.map(e=>e.layer))].map(name=>new Option(name,name)));
   $('importLayer').replaceChildren(...doc.layers.filter(layer=>!layer.raster).map(layer=>new Option(layer.name,layer.name)));
   resetImportSettings();
+  applyToolDefaults(Object.values(importFields).filter(id=>id!=='importLayer'));
+  $('importLayerRow').hidden=!$('importOneLayer').checked;
   $('importActionDetails').open=true;
   $('importDialog').showModal();
   invalidateImport(0);
@@ -6179,7 +6272,7 @@ function sendSelectionToLayer(destination,copy,create=false) {
   if(!source.length||!valid) return false;
   const layers=create?[...doc.layers,{name:destination,color:nextLayerColor(),visible:true}]:doc.layers;
   const picked=new Map(source.map(e=>[e.id,e]));
-  const before=doc.entities, moved=[], remap=new Map();
+  const before=doc.entities, moved=[], remap=new Map(), groups=new Map();
   const entities=before.flatMap(entity=>{
     if(!picked.has(entity.id)||!copy&&entity.layer===destination) return [entity];
     const indices=segmentSelection.get(entity.id);
@@ -6188,7 +6281,7 @@ function sendSelectionToLayer(destination,copy,create=false) {
     const remainder=copy?[entity]:indices?Edit.removeSegments(entity,indices):[];
     const survivors=copy?remainder:remainder.map((e,i)=>i?identity({...e,layer:entity.layer}):{...e,id:entity.id,layer:entity.layer});
     const transfers=target.map((e,i)=>!copy&&!survivors.length&&i===0?
-      {...e,id:entity.id,layer:destination}:identity({...e,layer:destination}));
+      {...e,id:entity.id,layer:destination}:identity({...e,layer:destination,...(copy?copiedVectorGroup(entity,groups):{})}));
     moved.push(...transfers);
     if(copy||indices) remap.set(entity.id,(copy?transfers:[...survivors,...transfers]).map(e=>e.id));
     return [...survivors,...transfers];
@@ -6275,6 +6368,11 @@ canvas.addEventListener('contextmenu',e=>{
   e.preventDefault();
   angleContext.replaceChildren();
   if(hasLayerActions) {
+    for(const [label,group] of [['Grouper',true],['Dégrouper',false]]) {
+      const button=document.createElement('button');button.type='button';button.textContent=I18n.t(label);
+      button.onclick=()=>{angleContext.hidden=true;groupVectors(group);};
+      angleContext.append(button);
+    }
     addLayerDestinations(false,e.clientY);
     addLayerDestinations(true,e.clientY);
   }
@@ -6455,6 +6553,10 @@ menuAction($('quickExport'),()=>{
   $('exportScope').querySelector('[value="selection"]').disabled=!hasSelection;
   $('exportText').checked=true;
   $('exportConstruction').checked=false;
+  applyToolDefaults(['exportText','exportConstruction','exportFormat']);
+  const preferredScope=toolDefault('exportScopeDefault','auto');
+  if(preferredScope!=='auto'&&(preferredScope!=='selection'||hasSelection))
+    exportForm.elements.namedItem('exportScope').value=preferredScope;
   $('exportLayers').replaceChildren(...doc.layers.filter(layer=>!layer.raster).map(layer=>{
     const label=document.createElement('label'), check=document.createElement('input');
     check.type='checkbox';check.value=layer.name;check.checked=layer.name===activeLayer;
@@ -6649,7 +6751,7 @@ $('resetShortcuts').onclick=()=>{
   $('shortcutFeedback').textContent=I18n.t('Raccourcis d’origine rétablis.');
   saveShortcuts();renderShortcuts();
 };
-menuAction($('preferences'),()=>{showCursorPreferences();renderShortcuts();$('preferencesDialog').showModal();});
+menuAction($('preferences'),()=>{showCursorPreferences();renderShortcuts();renderToolDefaults();$('preferencesDialog').showModal();});
 $('resetCursorShapes').onclick=()=>{
   cursorPreferences.shapes=CursorProfiles.normalize().shapes;saveCursorPreferences();showCursorPreferences();
 };
@@ -6878,13 +6980,13 @@ const helpSections={
   draw:'select poly tangentPoly rect rectCenter circle arc arcThree polygon ellipse slot bezier point origin offset text dimension transmissions'.split(' '),
   constraints:'constraintWorkflow horizontal vertical coincident midpoint parallel collinear perpendicular equal tangent symmetry locked'.split(' '),
   modify:'transform move scale rotate mirror reverse explode close autoClose fillet scissors'.split(' '),
-  workspace:'layers construction precision rasterLayer calibrateRaster rotateRaster alignRasterOrigin'.split(' '),
+  workspace:'layers groups construction precision rasterLayer calibrateRaster rotateRaster alignRasterOrigin'.split(' '),
   vector:'vectorPreview recognition autoConstraints junction overlaps vectorApply'.split(' '),
   image:'imagePreview brightness colors scan crop perspective straighten'.split(' '),
   files:'native exportVector exportRaster preferences'.split(' '),
 };
 const helpGlyphs={
-  constraintWorkflow:'◇',layers:'▤',construction:'┄',rasterLayer:'▧',vectorPreview:'▱',
+  constraintWorkflow:'◇',layers:'▤',groups:'▣',construction:'┄',rasterLayer:'▧',vectorPreview:'▱',
   recognition:'⌁',autoConstraints:'⊥',junction:'⋈',overlaps:'▣',vectorApply:'↳',
   imagePreview:'▧',brightness:'☼',colors:'◐',scan:'▦',crop:'⌗',perspective:'⏢',
   straighten:'∠',native:'▤',exportVector:'↗',exportRaster:'↗',preferences:'⚙',transmissions:'⚙'
@@ -6895,7 +6997,7 @@ const helpShortcutCommands={
   rectCenter:['tool:rect'],arcThree:['tool:arc'],
   move:['transform:move'],scale:['transform:scale'],rotate:['transform:rotate'],
   transform:['operation:transform','transform:auto'],
-  construction:['construction'],layers:['selectLayer'],constraintWorkflow:['remove'],
+  construction:['construction'],layers:['selectLayer'],groups:['group','ungroup'],constraintWorkflow:['remove'],
   precision:['cycleSnap','suspendSnap'],native:['open','save','saveAs']
 };
 function helpShortcuts(id) {
@@ -7068,10 +7170,12 @@ $('scissorsTolerance').oninput=()=>{
 };
 $('resetScissors').onclick=()=>{
   $('scissorsTolerance').value=.05;
-  $('scissorsCoincidence').checked=false;
+  $('scissorsAlong').checked=true;
+  $('scissorsCoincidence').checked=true;
   try {localStorage.removeItem('velocivector-scissors-tolerance');} catch {}
   requestDraw();
 };
+$('scissorsAlong').onchange=()=>requestDraw();
 $('closeTolerance').oninput=()=>{
   const value=$('closeTolerance').valueAsNumber;
   if(!Number.isFinite(value)||value<0) return;
@@ -7320,6 +7424,9 @@ window.addEventListener('keydown',e=>{
   }
   if(command==='fit') {e.preventDefault();fit();return;}
   if(command==='construction'&&!e.repeat) {e.preventDefault();toggleConstruction();return;}
+  if(['group','ungroup'].includes(command)&&!e.repeat&&tool==='select'&&!modification&&!constraintMode) {
+    e.preventDefault();groupVectors(command==='group');return;
+  }
   if(command==='selectLayer') {
     e.preventDefault();
     if(!e.repeat&&(tool==='select'&&!modification&&!constraintMode||choose('select'))) {
@@ -7399,6 +7506,7 @@ function refreshInterfaceLanguage() {
   applyTheme();
   showCursorPreferences();
   renderShortcuts();
+  if($('preferencesDialog').open) renderToolDefaults();
   update();
 }
 const languageSelect=$('interfaceLanguage');
@@ -7418,7 +7526,193 @@ window.addEventListener('languagechange',()=>{
 });
 const startupLanguage=I18n.language;
 I18n.ready.then(()=>{if(I18n.language!==startupLanguage) refreshInterfaceLanguage();});
-applyTheme();choose(tool);updateShortcutTitles();
+const defaultOffsetFields=['offsetDistance','offsetInside','offsetOutside','offsetSelectResult'];
+const defaultTextFields=[...Object.values(cadTextFields),'cadTextOrientation','cadTextSide','cadTextReverse'];
+const modificationDefaultFields={
+  move:['moveMode','moveX','moveY','rotateValue','scaleValue','scaleY','scaleDimensions'],
+  rotate:['rotateValue'],scale:['scaleValue','scaleY','scaleDimensions'],
+  mirror:['mirrorHorizontal','mirrorVertical','mirrorSegment','mirrorCopy'],
+  close:['closeTolerance'],autoClose:['autoCloseMethod','autoCloseTolerance'],
+  fillet:['filletRadius'],scissors:['scissorsAlong','scissorsTolerance','scissorsCoincidence']
+};
+const globalDefaultFields=['snap','autoCoincidence','grid','gridSnap','spacing','constructionStyle',
+  'constructionOpacity','dimensionOpacity','splineTension'];
+const toolDefaultsKey='velocivector-tool-defaults';
+let toolDefaults={};
+try {
+  const value=JSON.parse(localStorage.getItem(toolDefaultsKey)??'{}');
+  if(value&&typeof value==='object'&&!Array.isArray(value)) toolDefaults=value;
+} catch {}
+function toolDefault(id,fallback) {
+  return Object.hasOwn(toolDefaults,id)?toolDefaults[id]:fallback;
+}
+function applyToolDefaults(ids) {
+  let applied=false;
+  for(const id of ids) {
+    if(!Object.hasOwn(toolDefaults,id)) continue;
+    const field=$(id), value=toolDefaults[id];
+    if(!field) continue;
+    if(['radio','checkbox'].includes(field.type)) field.checked=Boolean(value);
+    else if(field.tagName!=='SELECT'||[...field.options].some(option=>option.value===String(value))) field.value=value;
+    applied=true;
+  }
+  return applied;
+}
+function applyModificationDefaults(type) {
+  applyToolDefaults(modificationDefaultFields[type]??[]);
+  if(type==='close') closeTolerance=$('closeTolerance').valueAsNumber;
+  if(['move','rotate','scale'].includes(type)) modification.locked=toolDefault('transformProportions',true);
+}
+const variants={
+  polyDefault:['poly','tangent'],rectDefault:['rect','corners'],arcDefault:['arc','center']
+};
+function syncGlobalToolDefaults(ids=globalDefaultFields) {
+  applyToolDefaults(ids.filter(id=>globalDefaultFields.includes(id)));
+  if(ids.includes('constructionStyle')) constructionStyle=toolDefault('constructionStyle',constructionStyle);
+  if(ids.includes('constructionOpacity')) constructionOpacity=Number(toolDefault('constructionOpacity',constructionOpacity));
+  if(ids.includes('dimensionOpacity')) dimensionOpacity=Number(toolDefault('dimensionOpacity',dimensionOpacity));
+  $('dimensionOpacityValue').textContent=dimensionOpacity+' %';
+  if(ids.includes('splineTension')) splineTension=$('splineTension').valueAsNumber/100;
+  if(ids.includes('drawConstructionDefault')) drawConstruction=toolDefault('drawConstructionDefault',false);
+  if(ids.includes('absoluteFrameDefault')) absoluteFrameReadout=toolDefault('absoluteFrameDefault',false);
+  $('frameCoordinates').setAttribute('aria-pressed',String(absoluteFrameReadout));
+  $('frameCoordinates').title=I18n.t(absoluteFrameReadout?'Afficher le déplacement relatif':'Afficher les coordonnées absolues');
+  if(ids.includes('polyDefault')) polylineMethod=toolDefault('polyDefault','tangent');
+  if(ids.includes('rectDefault')) rectangleMethod=toolDefault('rectDefault','corners');
+  if(ids.includes('arcDefault')) arcMethod=toolDefault('arcDefault','center');
+  updateToolIcons();updateShortcutTitles();update();
+}
+function factoryFieldValue(field) {
+  if(['checkbox','radio'].includes(field.type)) return field.defaultChecked;
+  if(field.tagName==='SELECT') return [...field.options].find(option=>option.defaultSelected)?.value??field.options[0]?.value??'';
+  return field.defaultValue;
+}
+const initialGlobalFields=new Map(globalDefaultFields.map(id=>[$(id).id,['checkbox','radio'].includes($(id).type)?$(id).checked:$(id).value]));
+initialGlobalFields.set('constructionStyle',constructionStyle);
+initialGlobalFields.set('constructionOpacity',constructionOpacity);
+function newDefaultSelect(choices) {
+  const select=document.createElement('select');
+  for(const [value,label] of choices) select.add(new Option(label,value));
+  return select;
+}
+function defaultPreferenceControl(id) {
+  if(variants[id]) {
+    const [tool,factory]=variants[id];
+    const choices=[...$(toolPopupIds[tool]).querySelectorAll('[data-tool-method]')]
+      .map(button=>[button.dataset.toolMethod,button.textContent.trim()]);
+    return {control:newDefaultSelect(choices),label:I18n.t(definitions[tool][1]),factory};
+  }
+  const choices={
+    mirrorAxisDefault:[['mirrorHorizontal','Horizontal'],['mirrorVertical','Vertical'],['mirrorSegment','Segment']],
+    transformModeDefault:[['auto','Automatique'],['move','Déplacer'],['scale','Échelle'],['rotate','Tourner']],
+    exportScopeDefault:[['auto','Automatique'],['selection','Sélection en cours'],['layers','Par calque'],['all','Tout le dessin']]
+  };
+  if(choices[id]) {
+    const label={mirrorAxisDefault:'Axe',transformModeDefault:'Mode de transformation',exportScopeDefault:'Tracés à exporter'}[id];
+    const options=choices[id];
+    const current=options.find(([key])=>toolDefault(key,false))?.[0]??options[0][0];
+    return {control:newDefaultSelect(options.map(([value,name])=>[value,I18n.t(name)])),label:I18n.t(label),
+      factory:options[0][0],current};
+  }
+  if(id==='exportFormat') return {
+    control:newDefaultSelect([['','Automatique'],...Object.entries(exportFormats).map(([value,format])=>[value,format.label])]
+      .map(([value,label])=>[value,I18n.t(label)])),label:I18n.t('Format'),factory:''
+  };
+  const synthetic={drawConstructionDefault:['Trait de construction',false],absoluteFrameDefault:['Coordonnées absolues du cadre',false],
+    transformProportions:['🔒 Proportions',true]};
+  if(synthetic[id]) {
+    const [label,factory]=synthetic[id], control=document.createElement('input');
+    control.type='checkbox';return {control,label:I18n.t(label),factory};
+  }
+  const field=$(id);
+  const control=field.cloneNode(true);
+  for(const name of ['id','name','form','list','autofocus','aria-describedby','hidden']) control.removeAttribute(name);
+  control.disabled=false;
+  if(field.hasAttribute('data-numeric-expression')) {
+    control.removeAttribute('data-numeric-expression');
+    control.type='number';Numeric.install(control);
+  }
+  const nativeLabel=field.labels?.[0], labelContents=nativeLabel?.cloneNode(true);
+  labelContents?.querySelectorAll('input,select,textarea,output,button').forEach(element=>element.remove());
+  const label=labelContents?.textContent.trim()||field.getAttribute('aria-label')||id;
+  const raster={rasterAngle:0,rasterScale:100,rasterActiveOpacity:80,rasterInactiveOpacity:35};
+  const factory=raster[id]??(id==='units'?Formats.empty().units:factoryFieldValue(field));
+  return {control,label,factory,current:initialGlobalFields.get(id)};
+}
+function saveToolDefaultSettings(ids) {
+  try {localStorage.setItem(toolDefaultsKey,JSON.stringify(toolDefaults));} catch {}
+  syncGlobalToolDefaults(ids);
+}
+function toolDefaultCategories() {
+  const drawingByTool={select:['absoluteFrameDefault'],poly:['polyDefault'],rect:['rectDefault'],arc:['arcDefault'],
+    polygon:['sides'],slot:['overall'],bezier:['splineTension'],offset:defaultOffsetFields,
+    text:defaultTextFields,dimension:['linearDimensionMode']};
+  const drawing=[...$('tools').children].map(button=>[definitions[button.dataset.tool][1],drawingByTool[button.dataset.tool]])
+    .filter(([,fields])=>fields);
+  return [
+    ['Fichier',[
+      ['Atelier d’importation',Object.values(importFields).filter(id=>id!=='importLayer')],
+      ['Atelier d’importation d’image',Object.keys(rasterImportDefaults)],
+      ['Export rapide',['exportFormat','exportScopeDefault','exportConstruction','exportText']]
+    ]],
+    ['Modification',[
+      ['Transformer',['transformModeDefault','moveMode','moveX','moveY','rotateValue','scaleValue','scaleY','transformProportions','scaleDimensions']],
+      ['Miroir',['mirrorAxisDefault','mirrorCopy']],['Fermer',modificationDefaultFields.close],
+      ['Fermeture automatique',modificationDefaultFields.autoClose],['Congé',modificationDefaultFields.fillet],
+      ['Ciseaux',modificationDefaultFields.scissors]
+    ]],
+    ['Grille et aimantation',[['Grille et aimantation',['snap','autoCoincidence','grid','gridSnap','spacing','units']],
+      ['Trait de construction',['drawConstructionDefault','constructionStyle']]]],
+    ['Dessin',drawing],
+    ['Calques',[['Image matricielle',['rasterAngle','rasterScale','rasterActiveOpacity','rasterInactiveOpacity']],
+      ['Calques',['constructionOpacity','dimensionOpacity']]]]
+  ];
+}
+function renderToolDefaults() {
+  const categories=toolDefaultCategories();
+  const list=$('toolDefaultsList');
+  list.replaceChildren();
+  for(const [category,groups] of categories) {
+    const heading=document.createElement('h3');
+    heading.textContent=I18n.t(category);list.append(heading);
+    for(const [name,ids] of groups) {
+      const details=document.createElement('details'), summary=document.createElement('summary');
+      summary.textContent=I18n.t(name);details.append(summary);list.append(details);
+      for(const id of ids) {
+        const {control,label,factory,current}=defaultPreferenceControl(id);
+        const row=document.createElement('label');
+        row.append(document.createTextNode(label),control);details.append(row);
+        const value=toolDefault(id,current??factory);
+        if(control.type==='checkbox') control.checked=Boolean(value);else control.value=value;
+        control.onchange=()=>{
+          if(!control.checkValidity()||control.hasAttribute('data-numeric-expression')&&!Number.isFinite(control.valueAsNumber)) return;
+          const next=control.type==='checkbox'?control.checked:control.value;
+          if(id==='mirrorAxisDefault') for(const key of ['mirrorHorizontal','mirrorVertical','mirrorSegment']) toolDefaults[key]=key===next;
+          else toolDefaults[id]=next;
+          saveToolDefaultSettings([id]);
+        };
+      }
+      const reset=document.createElement('button');
+      reset.type='button';reset.textContent=I18n.t('Par défaut');
+      reset.onclick=()=>{
+        for(const id of ids) {
+          if(id==='checkImportOverlaps') delete toolDefaults[id];
+          else toolDefaults[id]=defaultPreferenceControl(id).factory;
+        }
+        if(ids.includes('mirrorAxisDefault')) for(const key of modificationDefaultFields.mirror.slice(0,3)) delete toolDefaults[key];
+        saveToolDefaultSettings(ids);renderToolDefaults();
+      };
+      details.append(reset);
+    }
+  }
+}
+$('resetToolDefaults').onclick=()=>{
+  toolDefaults=Object.fromEntries(toolDefaultCategories().flatMap(([,groups])=>groups.flatMap(([,ids])=>
+    ids.filter(id=>id!=='checkImportOverlaps').map(id=>[id,defaultPreferenceControl(id).factory]))));
+  saveToolDefaultSettings(Object.keys(toolDefaults));renderToolDefaults();
+};
+doc.units=Number(toolDefault('units',doc.units));
+applyTheme();syncGlobalToolDefaults([...globalDefaultFields,...Object.keys(toolDefaults)]);choose(tool);updateShortcutTitles();
 
 
 

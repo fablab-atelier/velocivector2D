@@ -202,8 +202,9 @@
       <button id="resetFilletRadius" type="button">Par défaut</button>
     </div>
     <div id="scissorsOptions" hidden>
+      <label><input id="scissorsAlong" type="checkbox" checked> Suivre le tracé jusqu’aux croisements</label>
       <label>Tolérance (mm) <input id="scissorsTolerance" type="number" min="0" step="any" value="0.05"></label>
-      <label><input id="scissorsCoincidence" type="checkbox"> Coïncidence aux limites de coupe</label>
+      <label><input id="scissorsCoincidence" type="checkbox" checked> Coïncidence aux limites de coupe</label>
       <button id="resetScissors" type="button">Par défaut</button>
     </div>
     <div class="tool-actions"><button type="button" id="applyModification">Appliquer</button><button type="button" id="cancelModification" data-cancel-edit>Annuler l’opération</button></div>
@@ -463,6 +464,7 @@
       <button type="button" data-preference-page="languagePreferences" class="active" aria-current="page">Langue</button>
       <button type="button" data-preference-page="cursorPreferences">Curseurs</button>
       <button type="button" data-preference-page="shortcutPreferences">Raccourcis</button>
+      <button type="button" data-preference-page="toolDefaultPreferences">Options par défaut des outils</button>
     </aside>
     <section id="languagePreferences" class="preferences-content" aria-label="Langue">
       <div class="preferences-heading"><h2>Langue</h2></div>
@@ -486,6 +488,10 @@
       <div class="preferences-heading"><h2>Raccourcis clavier</h2><button type="button" id="resetShortcuts">Par défaut</button></div>
       <p id="shortcutFeedback" role="status"></p>
       <div id="shortcutList"></div>
+    </section>
+    <section id="toolDefaultPreferences" class="preferences-content" aria-label="Options par défaut des outils" hidden>
+      <div class="preferences-heading"><h2>Options par défaut des outils</h2><button type="button" id="resetToolDefaults">Tout par défaut</button></div>
+      <div id="toolDefaultsList"></div>
     </section>
   </div>
 </dialog>
@@ -540,11 +546,15 @@
   </div>
 </dialog>
 <dialog id="pluginDialog">
-  <div class="preferences-header">
-    <h2 id="pluginTitle"></h2>
-    <form method="dialog"><button type="submit">Fermer</button></form>
+  <div id="pluginTitleBar" class="preferences-header">
+    <h2 id="pluginTitle" tabindex="0"></h2>
+    <form method="dialog"><button id="pluginClose" type="submit">Fermer</button></form>
   </div>
+  <div id="pluginTabs" class="tool-actions"></div>
   <div id="pluginContent"></div>
+  <div class="plugin-window-footer"><button id="pluginResize" type="button">
+    <svg aria-hidden="true" viewBox="0 0 18 18"><path d="M3 15 15 3M8 15l7-7m-2 7 2-2"/></svg>
+  </button></div>
 </dialog>
 <script src="locale-en.js"></script><script src="help-fr.js"></script><script src="help-en.js"></script><script src="i18n.js"></script><script src="geometry.js"></script><script src="editing.js"></script><script src="constraints.js"></script><script src="formats.js"></script><script src="cursors.js"></script><script src="importing.js"></script><script src="numeric.js"></script><script src="raster-editing.js"></script><script src="text-geometry.js"></script><script src="app.js"></script><script src="plugins/host.js"></script>
 </body></html>

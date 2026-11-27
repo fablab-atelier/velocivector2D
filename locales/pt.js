@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('pt', {
+  "Déplacer la fenêtre": "Mover janela",
+  "Redimensionner la fenêtre": "Redimensionar janela",
+  "Options par défaut des outils": "Opções padrão das ferramentas",
+  "Grouper": "Agrupar",
+  "Dégrouper": "Desagrupar",
+  "help.groups.title": "Agrupar",
+  "help.groups.effect": "Clique em qualquer membro para selecionar o grupo. Os fragmentos mantidos continuam agrupados.",
   "Extensions": "Extensões",
   "help.transmissions.title": "Oficina de transmissões",
   "help.transmissions.effect": "Ajuste os dentes e o módulo ou passo e insira a transmissão e os diâmetros primitivos na camada ativa.",
@@ -878,7 +885,8 @@ I18n.register('pt', {
   "help.close.effect": "Fecha os traços cujos pontos finais estão dentro da tolerância de diferença especificada.",
   "help.autoClose.effect": "Encontre possíveis juntas na seleção. Escolha estender ou cortar, adicionar um arco tangente ou adicionar uma linha.",
   "help.fillet.effect": "Esta ferramenta conecta as duas partes com um arco tangente e destaca um filete impossível em vermelho.",
-  "help.scissors.effect": "Clique em uma porção para removê-la ou varre várias porções. Trimming parou em pontos detectados e interseções. A opção de coincidência liga novos pontos finais à geometria que parou o corte.",
+  "help.scissors.effect": "Clique em uma porção para removê-la ou varre várias porções. Trimming parou em pontos detectados e interseções. A opção de coincidência liga novos pontos finais à geometria que parou o corte. Por padrão, o corte passa pelos vértices até os cruzamentos, inclusive do próprio traçado. Desative para cortar apenas o trecho clicado.",
+  "Suivre le tracé jusqu’aux croisements": "Seguir o traçado até os cruzamentos",
   "help.layers.title": "Gestão de camadas",
   "help.layers.effect": "Clique duas vezes no nome para renomeá-lo. Arraste o manto para reordenar as camadas. O comando Eliminar ( {remove} ) no manto oferece opções se a camada contém vestígios. Use o menu de contexto para copiar ou mover a seleção para outra camada.",
   "help.construction.effect": "Ativar o estilo antes de desenhar ou alternar porções selecionadas com o atalho de alternador ( {construction} ). Os controles de camada definem a visibilidade, e o painel de camada controla a opacidade global.",

@@ -1,5 +1,7 @@
 'use strict';
 const helpFR=Object.freeze({
+  "help.groups.title": "Grouper",
+  "help.groups.effect": "Un clic sélectionne tout le groupe du calque. Les fragments conservés par les Ciseaux restent dans le groupe.",
   "help.transmissions.title": "Atelier de transmissions",
   "help.transmissions.effect": "Créez une transmission à partir du nombre de dents et du module ou du pas, puis insérez-la dans le calque actif avec ses diamètres primitifs.",
   "help.section.draw": "Dessin et cotation",
@@ -84,7 +86,7 @@ const helpFR=Object.freeze({
   "help.fillet.title": "Congé",
   "help.fillet.effect": "Réglez le rayon puis cliquez près d’un coin compatible. L’outil raccorde les deux portions avec un arc tangent et signale un congé impossible en rouge.",
   "help.scissors.title": "Ciseaux",
-  "help.scissors.effect": "Cliquez sur la portion à retirer ou balayez plusieurs portions. La coupe s’arrête aux points et intersections détectés. L’option de coïncidence lie les nouvelles extrémités à la géométrie qui arrête la coupe.",
+  "help.scissors.effect": "Cliquez sur la portion à retirer ou balayez plusieurs portions. La coupe s’arrête aux points et intersections détectés. L’option de coïncidence lie les nouvelles extrémités à la géométrie qui arrête la coupe. Par défaut, la coupe franchit les sommets et s’arrête aux intersections, y compris à un croisement du tracé avec lui-même. Décochez l’option pour limiter la coupe à la portion cliquée.",
   "help.section.workspace": "Calques et précision",
   "help.layers.title": "Gestion des calques",
   "help.layers.effect": "Double-cliquez sur le nom pour le modifier. Glissez la poignée pour réordonner les calques. La commande Supprimer ({remove}) sur la poignée ouvre un choix si le calque contient des tracés. Le menu contextuel permet de copier ou déplacer la sélection vers un autre calque.",

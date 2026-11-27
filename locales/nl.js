@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('nl', {
+  "Déplacer la fenêtre": "Venster verplaatsen",
+  "Redimensionner la fenêtre": "Venstergrootte wijzigen",
+  "Options par défaut des outils": "Standaardopties voor gereedschappen",
+  "Grouper": "Groeperen",
+  "Dégrouper": "Groep opheffen",
+  "help.groups.title": "Groeperen",
+  "help.groups.effect": "Klik op een lid om de laaggroep te selecteren. Overblijvende stukken blijven gegroepeerd.",
   "Extensions": "Uitbreidingen",
   "help.transmissions.title": "Transmissiewerkplaats",
   "help.transmissions.effect": "Stel tandtallen en module of steek in en voeg de transmissie met steekdiameters in de actieve laag in.",
@@ -878,7 +885,8 @@ I18n.register('nl', {
   "help.close.effect": "Sluit sporen waarvan de eindpunten binnen de gespecificeerde tolerantie liggen.",
   "help.autoClose.effect": "Zoek mogelijke verbindingen in de selectie. Kies uit te breiden of te knippen, een tangente boog toe te voegen of een lijn toe te voegen.",
   "help.fillet.effect": "Stel de straal en klik op een verenigbare hoek. Het instrument verbindt de twee delen met een tangente boog en belicht een onmogelijke filet in rood.",
-  "help.scissors.effect": "Klik op een gedeelte om het te verwijderen of door verschillende delen te vuren. Het snijden stopt op gedetecteerde punten en kruisingen. De toevallige optie bindt nieuwe eindpunten aan de geometrie die het snijden stopt.",
+  "help.scissors.effect": "Klik op een gedeelte om het te verwijderen of door verschillende delen te vuren. Het snijden stopt op gedetecteerde punten en kruisingen. De toevallige optie bindt nieuwe eindpunten aan de geometrie die het snijden stopt. Trimmen loopt over hoekpunten tot kruisingen, ook zelfkruisingen. Schakel uit om alleen het aangeklikte deel te trimmen.",
+  "Suivre le tracé jusqu’aux croisements": "Volg het pad tot aan kruisingen",
   "help.layers.title": "Layerbeheer",
   "help.layers.effect": "Dubbel klik op de naam om de naam te omschrijven. Sleep de handleiding om lagen te herbestellen. Het opdracht verwijderen ( {remove}) op de handleiding biedt keuzes als de laag sporen bevat. Gebruik het contextmenu om de selectie te kopiëren of naar een andere laag te verplaatsen.",
   "help.construction.effect": "De stijl in te schakelen voordat je geselecteerde delen tekent of omschakelt met de omschakeling ( {construction}).",

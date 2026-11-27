@@ -135,6 +135,28 @@ const createImporting=(G,Edit,Formal,Formats)=>{
     if(a&&b&&G.dot(a,b)>=Math.cos(Math.PI/5)) return unit(G.add(a,b));
     return towardEnd?(b??a):(a??b);
   }
+  // Fit a closed outline as editable cubics, retaining the specified hard corner.
+  function fitClosedCubics(outline,corner,tolerance) {
+    const points=[...outline.slice(corner),...outline.slice(0,corner),outline[corner]];
+    const segments=[];
+    function subdivide(start,end) {
+      const first=points[start], last=points[end];
+      const u=sourceTangent(points,start,false,true);
+      const v=G.mul(sourceTangent(points,end,false,false),-1);
+      const fit=fitBezier(points.slice(start,end+1),tolerance,[u,v]);
+      if(fit) segments.push(fit.curve);
+      else if(end-start===1) {
+        const handle=G.dist(first,last)/3;
+        segments.push({type:'bezier',p:[first,G.add(first,G.mul(u,handle)),G.add(last,G.mul(v,handle)),last]});
+      } else {
+        const mid=Math.floor((start+end)/2);
+        subdivide(start,mid);subdivide(mid,end);
+      }
+    }
+    subdivide(0,points.length-1);
+    return {type:'path',segments,closed:true};
+  }
+
   function withinRefitTolerance(curve,fit,tolerance) {
     let parameters=fit.parameters;
     for(let attempt=0;attempt<10;attempt++) {
@@ -730,7 +752,7 @@ const createImporting=(G,Edit,Formal,Formats)=>{
     return {doc,skipped:[...skipped],unitKnown:true};
   }
 
-  return {importDefaults,optimize,weight,bezierHandleCounts,relations,propose,contourCounts,overlappingTraces,placeProposal,readSVG};
+  return {importDefaults,optimize,fitClosedCubics,weight,bezierHandleCounts,relations,propose,contourCounts,overlappingTraces,placeProposal,readSVG};
 };
 const Importing=createImporting(typeof module==='undefined'?G:require('./geometry.js'),typeof module==='undefined'?Edit:require('./editing.js'),
   typeof module==='undefined'?Formal:require('./constraints.js'),typeof module==='undefined'?Formats:require('./formats.js'));

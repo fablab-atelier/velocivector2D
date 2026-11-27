@@ -1,5 +1,7 @@
 'use strict';
 const helpEN=Object.freeze({
+  "help.groups.title": "Group",
+  "help.groups.effect": "Click any member to select its layer group. Fragments kept by Trim remain grouped.",
   "help.transmissions.title": "Transmission workshop",
   "help.transmissions.effect": "Set tooth counts and module or pitch, then insert the transmission and its pitch diameters into the active layer.",
   "help.section.draw": "Drawing and dimensions",
@@ -84,7 +86,7 @@ const helpEN=Object.freeze({
   "help.fillet.title": "Fillet",
   "help.fillet.effect": "Set the radius and click near a compatible corner. The tool connects the two portions with a tangent arc and highlights an impossible fillet in red.",
   "help.scissors.title": "Trim",
-  "help.scissors.effect": "Click a portion to remove it or sweep across several portions. Trimming stops at detected points and intersections. The coincidence option binds new endpoints to the geometry that stops the cut.",
+  "help.scissors.effect": "Click a portion to remove it or sweep across several portions. Trimming stops at detected points and intersections. The coincidence option binds new endpoints to the geometry that stops the cut. By default, trimming passes vertices and stops at intersections, including self-crossings. Turn the option off to trim only the clicked portion.",
   "help.section.workspace": "Layers and precision",
   "help.layers.title": "Layer management",
   "help.layers.effect": "Double-click the name to rename it. Drag the handle to reorder layers. The Delete command ({remove}) on the handle offers choices if the layer contains traces. Use the context menu to copy or move the selection to another layer.",

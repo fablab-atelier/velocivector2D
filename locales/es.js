@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('es', {
+  "Déplacer la fenêtre": "Mover ventana",
+  "Redimensionner la fenêtre": "Cambiar tamaño de ventana",
+  "Options par défaut des outils": "Opciones predeterminadas de herramientas",
+  "Grouper": "Agrupar",
+  "Dégrouper": "Desagrupar",
+  "help.groups.title": "Agrupar",
+  "help.groups.effect": "Haz clic en cualquier miembro para seleccionar su grupo. Los fragmentos conservados siguen agrupados.",
   "Extensions": "Extensiones",
   "help.transmissions.title": "Taller de transmisiones",
   "help.transmissions.effect": "Indica los dientes y el módulo o paso e inserta la transmisión y sus diámetros primitivos en la capa activa.",
@@ -878,7 +885,8 @@ I18n.register('es', {
   "help.close.effect": "Cierra las huellas cuyos puntos finales están dentro de la tolerancia de brecha especificada.",
   "help.autoClose.effect": "Encuentra posibles juntas en la selección. Elige ampliar o recortar, añadir un arco tangente o añadir una línea.",
   "help.fillet.effect": "Establezca el radio y haga clic cerca de una esquina compatible. La herramienta conecta las dos partes con un arco tangente y pone de relieve un filete imposible en rojo.",
-  "help.scissors.effect": "El sistema de corte de la parte de la pieza se encuentra en el punto de corte de la pieza, donde se puede hacer un corte de la pieza.",
+  "help.scissors.effect": "El sistema de corte de la parte de la pieza se encuentra en el punto de corte de la pieza, donde se puede hacer un corte de la pieza. Por defecto el recorte pasa los vértices y se detiene en los cruces, incluso propios. Desactiva la opción para recortar solo el tramo pulsado.",
+  "Suivre le tracé jusqu’aux croisements": "Seguir el trazado hasta los cruces",
   "help.layers.title": "Gestión de capas",
   "help.layers.effect": "Haga doble clic en el nombre para cambiar de nombre. arrastrar el mango para reordenar capas. El comando Eliminar ( {remove}) en el mango ofrece opciones si la capa contiene rastros. Utilice el menú de contexto para copiar o mover la selección a otra capa.",
   "help.construction.effect": "Habilitar el estilo antes de dibujar o cambiar las partes seleccionadas con el atajo de cambio ( {construction} ). Los controles de capa establecen la visibilidad, y el panel de capa controla la opacidad global.",

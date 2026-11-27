@@ -1,5 +1,12 @@
 'use strict';
 I18n.register('tr', {
+  "Déplacer la fenêtre": "Pencereyi taşı",
+  "Redimensionner la fenêtre": "Pencereyi yeniden boyutlandır",
+  "Options par défaut des outils": "Varsayılan araç seçenekleri",
+  "Grouper": "Grupla",
+  "Dégrouper": "Grubu çöz",
+  "help.groups.title": "Grupla",
+  "help.groups.effect": "Bir üyeye tıklamak katman grubunu seçer. Kalan parçalar grupta kalır.",
   "Extensions": "Eklentiler",
   "help.transmissions.title": "Aktarma atölyesi",
   "help.transmissions.effect": "Diş sayılarını ve modülü veya adımı ayarlayıp aktarmayı bölüm çaplarıyla etkin katmana ekleyin.",
@@ -878,7 +885,8 @@ I18n.register('tr', {
   "help.close.effect": "Son noktaları belirtilen boşluk toleransının içinde olan izleri kapatır.",
   "help.autoClose.effect": "Seçimde olası eklemleri bulur. Uzatmak veya kesmek, bir dokunmatik yay eklemek veya bir çizgi eklemek için seçin. Sayıcılar açık ve kapalı izler gösterir.",
   "help.fillet.effect": "Rayon ayarlayın ve uyumlu bir köşenin yakınında tıklayın. Alet iki bölümü bir dokunmatik yayla birleştirir ve kırmızıda imkansız bir fileti vurgular.",
-  "help.scissors.effect": "Bir bölümde tıklayın veya birkaç bölümde tarayın. Kesim tespit edilen noktalarda ve kesişme noktalarında kesim durur. Tesadüf seçeneği kesimi durdurur.",
+  "help.scissors.effect": "Bir bölümde tıklayın veya birkaç bölümde tarayın. Kesim tespit edilen noktalarda ve kesişme noktalarında kesim durur. Tesadüf seçeneği kesimi durdurur. Kesim köşeleri geçip kendi kesişimleri dahil kesişimlerde durur. Yalnızca tıklanan kısmı kesmek için seçeneği kapatın.",
+  "Suivre le tracé jusqu’aux croisements": "Kesişimlere kadar yolu izle",
   "help.layers.title": "Katman yönetimi",
   "help.layers.effect": "Adını yeniden adlandırmak için iki kez tıklayın. Katmanları yeniden düzenlemek için elini çek. Elindeki Delete komutu ( {remove}) katman izler içerirse seçimler sunar. Seçimi kopyalamak veya başka bir katmana taşımak için bağlam menüsünü kullanın.",
   "help.precision.effect": "Şebekeler, işaretçi yakınında çabuk hedef gösterir. Holding {alignment} uyumlu araçlarda 15 ° artışlarda yönler sunar.",

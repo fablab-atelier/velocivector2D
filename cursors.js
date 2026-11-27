@@ -14,6 +14,7 @@ const CursorProfiles=(()=>{
     rotateDrag:['Rotation pendant le glisser','turnDouble','turnDot','turnQuarter']
   };
   const icons={
+    precision:['Flèche précise','M3 3l17 14-8-1-3 7z',3,3,true],
     pointer:['Flèche','M5 4l17 15-8-1-3 7z',5,4,true],
     pointerCorner:['Flèche et repère','M5 4l13 11-6-1-2 6z M19 16h7v7 M26 27h-7',5,4],
     selectCross:['Croix encadrée','M16 6v6m0 8v6M6 16h6m8 0h6 M13 13h6v6h-6z',16,16],
@@ -45,12 +46,13 @@ const CursorProfiles=(()=>{
   const tools={
     select:['Sélection','#50d7bf'],poly:['Ligne / polyligne','#f7be5a'],tangentPoly:['Polyligne tangente','#f6a879'],rect:['Rectangle','#a5d96d'],circle:['Cercle','#70beff'],
     arc:['Arc','#fb9374'],polygon:['Polygone','#ce9aff'],ellipse:['Ellipse','#f58dcc'],slot:['Oblong','#68d8ed'],
-    bezier:['Plume Bézier','#ffcc78'],origin:['Origine de travail','#82bce7'],point:['Point','#7fe0a6'],offset:['Décalage de tracé','#efb58f'],dimension:['Cotation','#8fb9ff'],
+    bezier:['Plume Bézier','#ffcc78'],origin:['Origine de travail','#82bce7'],point:['Point','#7fe0a6'],offset:['Décalage de tracé','#efb58f'],dimension:['Cotation','#8fb9ff'],text:['Texte','#b3a0f2'],
     move:['Déplacer','#70d3a4'],rotate:['Tourner','#ef9b53'],scale:['Échelle','#ad9aff'],mirror:['Miroir','#56c7ff'],
     reverse:['Inverser','#ffc58e'],explode:['Éclater','#ef869c'],close:['Fermer','#87d586'],fillet:['Congé','#68d6d8'],scissors:['Ciseaux','#f5a743'],pan:['Navigation','#aab9c9'],
     horizontal:['Horizontale','#6ed3e8'],vertical:['Verticale','#91b7ff'],coincident:['Coïncidente','#95df98'],
     midpoint:['Milieu','#f6e070'],parallel:['Parallèle','#c7a3ff'],perpendicular:['Perpendiculaire','#8bd6ef'],equal:['Égale','#f1abce'],tangent:['Tangente','#ffac85'],symmetry:['Symétrie','#abd880'],
-    locked:['Verrouillée','#ff8d91']
+    locked:['Verrouillée','#ff8d91'],collinear:['Colinéaire','#9caeff'],
+    autoClose:['Fermeture automatique','#87d586'],raster:['Image matricielle','#82bce7']
   };
   const isColor=value=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value);
   function normalize(raw) {
@@ -60,7 +62,7 @@ const CursorProfiles=(()=>{
       shapes[key]=[fallback,...choices].includes(shape)?shape:fallback;
     }
     for(const [key,[,fallback]] of Object.entries(tools)) colors[key]=isColor(raw?.colors?.[key])?raw.colors[key]:fallback;
-    return {shapes,colors};
+    return {mode:raw?.mode==='classic'?'classic':'precision',shapes,colors};
   }
   const cache=new Map();
   function image(name,color,rotation=0) {
@@ -70,7 +72,8 @@ const CursorProfiles=(()=>{
       if(cache.size>=300) cache.clear();
       const start='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><g transform="rotate('+rotation+' 16 16)" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="3">';
       const shape='<path d="'+path+'" fill="'+(fill?color:'none')+'" stroke="';
-      const svg=start+shape+'#0d1520" stroke-width="3.1"/>'+shape+color+'" stroke-width="1.35"/></g></svg>';
+      const svg=name==='precision'?start+'<path d="'+path+'" fill="'+color+'"/><path d="M5 5.5l12.5 10.3-6.1-.7-2.2 5.1z" fill="none" stroke="#0d1520" stroke-width=".8"/></g></svg>':
+        start+shape+'#0d1520" stroke-width="3.1"/>'+shape+color+'" stroke-width="1.35"/></g></svg>';
       cache.set(key,{src:'data:image/svg+xml,'+encodeURIComponent(svg),x,y,label});
     }
     return cache.get(key);
@@ -80,7 +83,11 @@ const CursorProfiles=(()=>{
     const picture=image(name,preferences.colors[tool]??preferences.colors.select,rotation);
     return 'url("'+picture.src+'") '+picture.x+' '+picture.y+', '+fallback;
   }
-  return {profiles,icons,tools,normalize,image,css};
+  function precisionCss(tool,preferences) {
+    const picture=image('precision',preferences.colors[tool]??preferences.colors.select);
+    return 'url("'+picture.src+'") '+picture.x+' '+picture.y+', default';
+  }
+  return {profiles,icons,tools,normalize,image,css,precisionCss};
 })();
 if(typeof module!=='undefined') module.exports=CursorProfiles;
 

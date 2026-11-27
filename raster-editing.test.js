@@ -71,3 +71,38 @@ test('full-resolution processing matches the same color protection applied to a 
   finally {if(browserImageData) global.ImageData=browserImageData;else delete global.ImageData;}
   assert.deepEqual(canvas,enhance(source,settings));
 });
+
+test('scan cleanup removes isolated specks, bridges bounded gaps and clears the white background',()=>{
+  const {processPixels}=require('./raster-editing.js');
+  const w=12,h=7,rgba=new Uint8ClampedArray(w*h*4).fill(255);
+  for(const [x,y] of [[1,1],[2,4],[3,4],[5,4],[6,4]]) rgba.fill(0,(y*w+x)*4,(y*w+x)*4+3);
+  const {data}=processPixels(rgba,w,h,{scan:{enabled:true,threshold:150,specks:1,gap:1,background:true}});
+  const alpha=(x,y)=>data[(y*w+x)*4+3];
+  assert.equal(alpha(1,1),0);
+  assert.equal(alpha(4,4),255);
+  assert.equal(alpha(4,3),0);
+});
+test('raster geometry rectifies perspective, rotates and crops the resulting image',()=>{
+  const {plan,validQuad}=require('./raster-editing.js');
+  const quad=[[.1,.1],[.9,.1],[.8,.9],[.2,.9]];
+  assert.ok(validQuad(quad));
+  assert.equal(validQuad([quad[0],quad[2],quad[1],quad[3]]),false);
+  const shape=plan(100,100,{quad,crop:[0,0,.5,1]});
+  assert.equal(shape.width,40);
+  const mapped=shape.map(.5,.5);
+  assert.ok(mapped[0]>=10&&mapped[0]<12&&mapped[1]>=10&&mapped[1]<12);
+  assert.equal(plan(90,40,{angle:90}).width,40);
+  assert.equal(plan(90,40,{angle:90}).height,90);
+});
+test('perspective correction preserves the reference orientation and composes explicit rotation',()=>{
+  const {plan}=require('./raster-editing.js');
+  const a=Math.PI/6,c=Math.cos(a),s=Math.sin(a);
+  const quad=[[-30,-15],[30,-15],[30,15],[-30,15]].map(([x,y])=>[(50+x*c-y*s)/100,(50+x*s+y*c)/100]);
+  for(const angle of [0,20]) {
+    const result=plan(100,100,{quad,angle});
+    const origin=result.map(result.width/2,result.height/2), point=result.map(result.width/2+5,result.height/2);
+    const difference=angle*Math.PI/180;
+    assert.ok(Math.abs(point[0]-origin[0]-5*Math.cos(difference))<1e-8);
+    assert.ok(Math.abs(point[1]-origin[1]+5*Math.sin(difference))<1e-8);
+  }
+});

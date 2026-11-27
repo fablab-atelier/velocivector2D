@@ -52,6 +52,14 @@ const createFormal=(G,Edit)=>{
   const isMidpointRef=ref=>ref.kind==='point'&&ref.index>=midpointIndex;
   const hasMidpoint=segment=>Boolean(segment&&(['line','arc','bezier'].includes(segment.type)||
     segment.type==='ellipse'&&segment.s!==undefined));
+  function* originPoints(entity) {
+    for(const [index,p] of referencePoints(entity).entries()) {
+      if(p) yield {p,ref:{id:entity.id,kind:'point',index}};
+    }
+    for(const [index,segment] of referenceEdges(entity).entries()) {
+      if(hasMidpoint(segment)) yield {p:G.traceAt(segment,.5),ref:midpointRef({id:entity.id,index})};
+    }
+  }
   function resolve(entities,ref) {
     if(ref.kind==='origin') return ref.target;
     const e=entities.get(ref.id);
@@ -353,11 +361,19 @@ const createFormal=(G,Edit)=>{
   }
   function shapeConstraints(entity,tool) {
     if(tool==='slot'||entity.profile==='slot') return slotConstraints(entity);
-    if(entity.type!=='poly'||!entity.closed||!['rect','polygon'].includes(tool)) return [];
+    if(entity.type!=='poly'||!entity.closed||!['rect','rectCorners','polygon'].includes(tool)) return [];
     const n=entity.p.length;
     const edge=index=>({id:entity.id,kind:'edge',index});
     const pair=(type,i,j)=>({type,refs:[edge(i),edge(j)]});
-    if(tool==='rect') return [0,1,2].map(i=>pair('perpendicular',i,i+1));
+    if(tool==='rect'||tool==='rectCorners') {
+      const corners=[0,1,2].map(i=>pair('perpendicular',i,i+1));
+      if(tool==='rectCorners') {
+        // Opposite horizontal sides start at vertices 0 and 2. World Y increases upward.
+        const top=entity.p[0][1]>entity.p[2][1]?0:2;
+        corners.push({type:'horizontal',refs:[edge(top)]});
+      }
+      return corners;
+    }
     const parts=Edit.edges(entity), result=[];
     for(let i=0;i<n;i++) {
       const j=(i+1)%n, a=lineVector(parts[i]), b=lineVector(parts[j]);
@@ -775,11 +791,25 @@ const createFormal=(G,Edit)=>{
     const old=new Map(before.map(e=>[e.id,e]));
     const output=[...constraints], seen=new Set(output.map(signature));
     const nodes=[];
+    const originsByLayer=new Map();
     for(const e of items) {
       const previous=old.get(e.id), previousPoints=previous&&previous!==e?vertices(previous):[];
       for(const [index,p] of vertices(e).entries()) {
         const prior=previousPoints[index];
-        nodes.push({p,layer:e.layer,ref:{id:e.id,kind:'point',index},changed:previous!==e&&(!prior||G.dist(prior,p)>G.eps)});
+        nodes.push({p,ref:{id:e.id,kind:'point',index},changed:previous!==e&&(!prior||G.dist(prior,p)>G.eps)});
+      }
+      if(previous===e) continue;
+      if(!originsByLayer.has(e.layer)) originsByLayer.set(e.layer,origins(e.layer));
+      const targets=originsByLayer.get(e.layer);
+      if(!targets.length) continue;
+      const matched=new Set();
+      for(const {p,ref} of originPoints(e)) for(const {name,target} of targets) {
+        if(matched.has(name)||G.dist(p,target)>tolerance) continue;
+        matched.add(name);
+        const prior=previous&&resolve(old,ref);
+        if(prior&&G.dist(prior,p)<=G.eps) continue;
+        const c={type:'coincident',refs:[ref],origin:name,target}, id=signature(c);
+        if(!seen.has(id)) {seen.add(id);output.push(c);}
       }
     }
     const buckets=new Map();
@@ -789,11 +819,6 @@ const createFormal=(G,Edit)=>{
       buckets.get(x+'/'+y).push(node);
     }
     for(const node of nodes) if(node.changed) {
-      for(const {name,target} of origins(node.layer)) {
-        if(G.dist(node.p,target)>tolerance) continue;
-        const c={type:'coincident',refs:[node.ref],origin:name,target}, id=signature(c);
-        if(!seen.has(id)) {seen.add(id);output.push(c);}
-      }
       const [x,y]=node.p.map(n=>Math.floor(n/tolerance));
       for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++) for(const other of buckets.get((x+i)+'/'+(y+j))??[]) {
         if(node.ref.id===other.ref.id||G.dist(node.p,other.p)>tolerance) continue;
@@ -1009,7 +1034,7 @@ const createFormal=(G,Edit)=>{
     return {entities,joined,constraints,lost,junctions};
   }
   return {closeTraces,names,count,dimensionNames,isDimension,isDriving,dimensionGeometry,dimensionValue,dimensionCanDrive,linearDimensionMode,
-    segmentPairMode,angleLayout,angleRays,key,sameRef,vertices,referencePoints,theoreticalReferences,midpointRef,isMidpointRef,hasMidpoint,part,referenceEdges,resolve,accepts,isPointOnTrace,make,equalSelection,satisfied,signature,shapeConstraints,slotConstraints,slotCenterline,protectedSlot,valid,solve,solveDimension,solveArcEndpoint,automatic,movementRelations,connected,preservesContourOrientation,remap,remapReference};
+    segmentPairMode,angleLayout,angleRays,key,sameRef,vertices,referencePoints,theoreticalReferences,midpointRef,isMidpointRef,hasMidpoint,originPoints,part,referenceEdges,resolve,accepts,isPointOnTrace,make,equalSelection,satisfied,signature,shapeConstraints,slotConstraints,slotCenterline,protectedSlot,valid,solve,solveDimension,solveArcEndpoint,automatic,movementRelations,connected,preservesContourOrientation,remap,remapReference};
 };
 const Formal=createFormal(typeof module==='undefined'?G:require('./geometry.js'),typeof module==='undefined'?Edit:require('./editing.js'));
 if(typeof module!=='undefined') module.exports=Formal;

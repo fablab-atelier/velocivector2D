@@ -4,7 +4,13 @@ Prototype de dessin géométrique pour préparer des fichiers de découpe. Tout 
 
 ## Lancement
 
-Sous Windows, double-cliquer sur **Lancer.cmd** pour ouvrir l’application dans une fenêtre Microsoft Edge dédiée. Le lanceur se replie sur le navigateur par défaut si Edge est absent. Sur Linux ou macOS, ouvrir **index.html** dans un navigateur moderne. Dans **Fichier → Préférences → Langue**, choisir le français, l’anglais ou la langue du navigateur. Le choix manuel est mémorisé pour les prochaines ouvertures.
+Sous Windows, double-cliquer sur **Lancer.cmd** pour ouvrir l’application dans une fenêtre Microsoft Edge dédiée. Le lanceur se replie sur le navigateur par défaut si Edge est absent. Sur Linux ou macOS, ouvrir **index.html** dans un navigateur moderne. Dans **Fichier → Préférences → Langue**, choisir une des 15 langues ou suivre la langue du navigateur. Le choix manuel est mémorisé pour les prochaines ouvertures.
+
+Le catalogue de chaque langue couvre les menus, champs, infobulles, messages et fiches d’aide. Les traductions complémentaires ont été préparées hors ligne et se chargent à la demande. Les consignes de traduction pour les prochains outils figurent dans `AGENTS.md`.
+
+## Extensions
+
+Sous Windows, `Lancer.cmd` détecte les dossiers `plugins/<id>/` contenant un fichier `plugin.js`. Le menu **Extensions** donne accès aux ateliers, dont l’**Atelier de transmissions**. [Guide de l’API pour les développeurs](plugins/README.md) · [Contrat compact pour les agents](plugins/API-AGENT.md)
 
 ## Tracer une première pièce
 
@@ -117,7 +123,7 @@ Pour translater un ensemble de segments orientés reliés par leurs extrémités
 
 ## Utiliser une image de référence
 
-Ouvrir **Fichier → Importer une image…** et choisir un fichier PNG, JPEG (y compris JFIF), AVIF, WebP ou GIF. L’atelier permet de comparer le résultat à l’original, de régler la luminosité et le contraste, et de protéger plusieurs couleurs prélevées à la pipette. La tolérance élargit la sélection aux teintes proches. Le curseur d’opacité règle les pixels non protégés. Le VCV conserve l’encodage d’origine sans retouche et enregistre le résultat en PNG pleine résolution après retouche. Les images animées s’affichent comme références fixes.
+Ouvrir **Fichier → Importer une image…** et choisir un fichier PNG, JPEG (y compris JFIF), AVIF, WebP ou GIF. L’atelier permet de comparer le résultat à l’original, de régler la luminosité et le contraste, et de protéger plusieurs couleurs prélevées à la pipette. La tolérance élargit la sélection aux teintes proches. Le curseur d’opacité règle les pixels non protégés. Le VCV intègre chaque nouvelle image en PNG pleine résolution, avec ou sans retouche. Les images animées s’affichent comme références fixes.
 
 L’image est placée derrière le dessin dans un calque matriciel. La taille initiale suit une résolution de référence de 96 pixels par pouce. Sélectionner le calque pour régler sa rotation autour du centre, son échelle et ses opacités active et inactive. **Appliquer** les enregistre dans le projet. Les exports DXF et SVG contiennent la géométrie vectorielle.
 
@@ -125,3 +131,15 @@ L’image est placée derrière le dessin dans un calque matriciel. La taille in
 - **Tourner** utilise le point cliqué comme pivot. Glisser horizontalement pour tourner et s’en écarter verticalement pour affiner le geste. **Maj** aimante la rotation par pas de 15° et **Ctrl** divise l’amplitude du geste par quatre.
 - **Caler sur le POA** déplace l’image pour que le point cliqué corresponde à l’origine absolue.
 - Double-cliquer sur le nom d’un calque pour le renommer. Les nouveaux calques matriciels sont nommés **Image 1**, **Image 2**, etc.
+
+Dans l’atelier, **Nettoyer un plan scanné** propose le seuil fixe ou adaptatif, la suppression des taches, le comblement des petites coupures, la correction de l’épaisseur et le fond transparent. **Recadrer et redresser** permet de choisir les points à la souris. Pour une photo, cliquer dans l’ordre sur les coins haut gauche, haut droit, bas droit et bas gauche, puis calibrer. Le redressement conserve l’orientation du bord supérieur choisi.
+
+Pour récupérer l’image intégrée au projet, ouvrir **Fichier → Export rapide → PNG** puis choisir un seul calque matriciel. Le PNG est exporté à son opacité d’origine, indépendamment de l’opacité du calque dans le dessin. Les pixels transparents de l’image sont conservés.
+
+## Texte éditable
+
+Choisir **Texte (T)**, saisir le contenu puis cliquer dans le dessin. Pour déplacer un texte, le faire glisser avec **Sélection** ou **Texte**. Pour modifier le texte directement dans le dessin, double-cliquer dessus. Le caret se place au clic et le glissé sélectionne les caractères. **Ctrl+Entrée** valide la saisie et **Échap** l’annule. Le contenu, la police, l’alignement, la hauteur, la largeur et les espacements sont conservés dans le projet VCV. La hauteur correspond à celle des capitales. Le menu **Police** affiche chaque famille disponible dans sa propre police. Cliquer sur **Lister les polices locales** pour ajouter celles auxquelles le navigateur accorde l’accès, ou choisir **Autre police…** pour saisir un nom. Les noms autorisés sont mémorisés dans le navigateur. Utiliser **Actualiser les polices locales** après une installation ou une suppression de police.
+
+Dans **Texte sur une courbe**, choisir **Courbe du dessin** et cliquer sur le tracé, ou choisir **Courbe circulaire** et renseigner le rayon. Le curseur de placement choisit le point de départ. Le décalage longitudinal, la distance à la courbe, le côté et l’orientation des lettres restent modifiables. Sur une courbe ouverte, seuls les caractères dont le centre tient sur le support sont affichés.
+
+**Inclure le texte** est coché par défaut pour les exports DXF et SVG. Les lettres deviennent des contours fermés, avec leurs évidements. Le VCV conserve le texte à éditer.

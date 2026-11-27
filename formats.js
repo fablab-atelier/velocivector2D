@@ -91,6 +91,21 @@ const createFormats=()=>{
         throw Error('Origine de travail active invalide.');
     }
     if(names.size===imageLayers.size || doc.entities.some(e=>!geometry.serial(e) || !editing.valid(e) || (!names.has(e.layer)||imageLayers.has(e.layer)))) throw Error('Géométrie ou calque invalide.');
+    if(doc.texts!==undefined) {
+      const ids=new Set();
+      if(!Array.isArray(doc.texts)||doc.texts.some(text=>{
+        if(!text||!Number.isSafeInteger(text.id)||text.id<1||ids.has(text.id)||!names.has(text.layer)||imageLayers.has(text.layer)) return true;
+        ids.add(text.id);
+        return typeof text.content!=='string'||!text.content.trim()||text.content.length>2000||
+          typeof text.family!=='string'||!text.family.trim()||text.family.length>128||
+          !Array.isArray(text.p)||text.p.length!==2||!text.p.every(v=>Number.isFinite(v)&&Math.abs(v)<=1e12)||
+          !['left','center','right'].includes(text.align)||!['straight','arc','linked'].includes(text.pathMode)||
+          !['height','width','angle','letter','line','radius','along','offset','fraction'].every(key=>Number.isFinite(text[key])&&Math.abs(text[key])<=1e12)||
+          text.height<=0||text.width<=0||text.line<0||text.radius<0||text.fraction<0||text.fraction>1||
+          typeof text.reverse!=='boolean'||typeof text.inside!=='boolean'||typeof text.upright!=='boolean'||
+          text.pathMode==='linked'&&(!Number.isSafeInteger(text.pathId)||text.pathId<1);
+      })) throw Error('Texte du projet invalide.');
+    }
     if(Array.isArray(doc.constraints)) {
       const items=new Map(doc.entities.map(entity=>[entity.id,entity]));
       // Older files can contain a redundant coincidence left by joining a contour.

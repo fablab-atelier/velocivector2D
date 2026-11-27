@@ -70,6 +70,7 @@ const Numeric=(()=>{
     });
     input.addEventListener('input',()=>validate(),true);
     input.addEventListener('change',()=>validate(true),true);
+    input.addEventListener('blur',()=>validate(true),true);
     input.addEventListener('keydown',event=>{
       if(event.key!=='Enter'||event.isComposing||event.ctrlKey||event.altKey||event.metaKey) return;
       if(!validate(true)&&input.value.trim()) {

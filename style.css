@@ -56,6 +56,53 @@
 .preferences-body{display:grid;grid-template-columns:155px minmax(0,1fr);min-height:0}
 .preferences-nav{border-right:1px solid var(--border);padding:12px}.preferences-nav button{width:100%;text-align:left}
 .preferences-content{overflow:auto;padding:16px}.preferences-heading{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}
+#interfaceLanguage{width:min(220px,50%);text-align:start}
+[dir=rtl] .menu-popup{inset-inline-start:0;left:auto}
+[dir=rtl] .help-shortcuts kbd{direction:ltr;unicode-bidi:isolate}
+#helpMenu{min-width:240px}
+#helpMenu button{display:block;width:100%}
+#pluginsMenu button{display:block;width:100%}
+#pluginDialog{width:min(1000px,94vw);max-height:90dvh;padding:0;background:var(--panel);color:inherit;border:1px solid var(--border);border-radius:10px}
+#pluginDialog::backdrop{background:#0008}
+#pluginContent{padding:14px}
+.transmission-form{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);gap:14px}
+.transmission-form fieldset{min-width:0;margin:0}
+.transmission-form select,.transmission-form input{width:45%;min-width:85px}
+.transmission-form canvas{width:100%;height:auto;border:1px solid var(--border);background:var(--panel)}
+.transmission-form output{display:block;margin:8px 0}
+@media(max-width:620px){.transmission-form{grid-template-columns:1fr}}
+#helpDialog{width:min(940px,94vw);height:min(720px,88dvh);padding:0;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:inherit;overflow:hidden}
+#helpDialog::backdrop{background:#0008}
+#aboutDialog{width:min(640px,94vw);max-height:88dvh;padding:0;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:inherit;overflow:hidden}
+#aboutDialog::backdrop{background:#0008}
+#aboutDialog .help-layout{max-height:calc(88dvh - 2px)}
+.about-content{overflow:auto;padding:16px 20px;line-height:1.5}
+.about-content section{border-block-start:1px solid var(--border);padding-block:12px}
+.about-content h3,.about-content ul{margin:0 0 8px}
+.about-content p{color:inherit}
+.about-version data{margin-inline-start:6px;font-weight:700;color:var(--accent)}
+.app-brand,.dialog-brand{display:flex;align-items:center;gap:8px}
+.app-brand img,.dialog-brand img{display:block;flex:none;object-fit:contain}
+.about-brand{gap:14px;margin-block-end:12px}
+.about-brand p{margin:0}
+.about-links a{color:var(--accent)}
+.help-layout{display:grid;grid-template-rows:auto minmax(0,1fr);height:100%}
+.help-body{display:grid;grid-template-columns:minmax(150px,225px) minmax(0,1fr);min-height:0}
+#helpSections{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;overflow:auto;padding:12px;border:0;border-inline-end:1px solid var(--border)}
+#helpSections button{text-align:start;overflow-wrap:anywhere}
+#helpSections button[aria-pressed=true]{border-color:var(--accent)}
+#helpContent{overflow:auto;padding:16px 20px}
+#helpSectionTitle{margin:0 0 12px;font-size:16px}
+#helpCards{list-style:none;margin:0;padding:0}
+#helpCards li{display:grid;grid-template-columns:32px minmax(0,1fr);gap:10px;padding:10px 0;border-block-start:1px solid var(--border)}
+#helpCards h4{margin:0 0 4px}
+#helpCards p{margin:0;line-height:1.45;color:inherit}
+#helpCards .help-shortcuts{margin-block-end:5px;font-size:12px}
+.help-shortcuts kbd{display:inline-block;padding-inline:5px;border:1px solid var(--border);border-radius:4px;font:inherit;font-weight:600;color:var(--accent)}
+.help-icon{display:grid;place-items:center;width:32px;height:32px;font-size:21px;color:var(--accent)}
+.help-icon img,.help-icon svg{display:block;width:24px;height:24px}
+.help-icon svg:not(.constraint-icon){fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:630px){.help-body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}#helpSections{flex-direction:row;flex-wrap:nowrap;max-width:100%;border-inline-end:0;border-block-end:1px solid var(--border)}#helpSections button{flex:none;max-width:200px}#helpContent{padding:12px}}
 .cursor-preference-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:5px 14px;margin-bottom:24px}
 .cursor-preference{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:6px;min-width:0;margin:0;padding:3px;border-bottom:1px solid var(--border)}
 .cursor-preference select{width:auto;max-width:128px}.color-preference input[type=color]{width:42px}
@@ -63,6 +110,7 @@
 
 #snapIndicator{position:absolute;z-index:2;pointer-events:none;display:flex;align-items:center}
 #snapIndicator img{display:block;width:20px;height:20px;filter:drop-shadow(0 0 1.3px #ffffffe0)}
+#cursorMode{width:auto}
 #snapIndicatorOptions .cursor-preference{grid-template-columns:32px minmax(0,1fr) auto}
 
 #tools button img{display:block;width:23px;height:23px;margin:auto}
@@ -182,3 +230,29 @@
 #rasterProtectedColors li{display:flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px}
 #rasterProtectedColors button{padding:0 3px;line-height:1}
 .raster-color-swatch{width:12px;height:12px;border:1px solid var(--border);border-radius:2px}
+
+.raster-import-body details{border:1px solid var(--border);border-radius:5px;margin-bottom:8px;padding:7px}
+.raster-import-body summary{cursor:pointer;font-weight:600}
+.raster-import-body details button{margin-top:4px}
+.raster-import-body input[data-numeric-expression]{width:5em}
+.raster-workshop-buttons{display:flex;flex-direction:column;align-items:flex-start}
+
+#textOptions label:has(textarea){align-items:stretch;flex-direction:column}
+#cadTextContent{width:100%;resize:vertical;background:var(--panel);color:inherit;border:1px solid var(--border);border-radius:5px;padding:6px;font:inherit}
+#textOptions fieldset{min-width:0;margin-top:8px;border:1px solid var(--border);border-radius:5px}
+#textOptions input[data-numeric-expression]{width:5em;flex:none}
+#textOptions select{width:auto;max-width:55%}
+#textOptions .tool-actions{flex-wrap:wrap}
+
+#cadInlineEditor{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;padding:0;border:0;resize:none}
+#cadFontStatus{display:block;font-size:12px;margin-top:3px}
+#cadFontMenu summary{display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;padding:4px 0}
+#cadFontCurrent{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cadFontList{display:grid;max-height:230px;overflow:auto;gap:2px;padding:4px;border:1px solid var(--border);border-radius:5px}
+#cadFontList button{text-align:start;padding:5px;font-size:15px;overflow-wrap:anywhere}
+#cadFontList button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+.cad-font-picker{position:relative}
+.cad-font-picker:has(#listCadFonts:not([hidden])) summary{padding-inline-end:32px;min-height:26px}
+#listCadFonts{position:absolute;inset-block-start:0;inset-inline-end:0;display:grid;place-items:center;padding:3px;width:26px;height:26px}
+#listCadFonts svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

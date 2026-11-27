@@ -402,6 +402,20 @@ test('origin coincidences are fixed, persist in the drawing, and do not change D
   assert.throws(()=>F.native(JSON.stringify(invalid)),/origine invalide/);
 });
 
+test('placing a rectangle center or moving a segment midpoint onto an origin binds the derived point',()=>{
+  const rectangle={...G.shape('rectCenter',[[0,0],[5,3]]),id:1,layer:'0'};
+  const previous=line(2,[11,20],[15,20]);
+  const moved=line(2,[8,20],[12,20]);
+  const origins=()=>[{name:'POA',target:[0,0]},{name:'POT1',target:[10,20]}];
+  const constraints=C.automatic([previous],[rectangle,moved],[],origins).filter(c=>c.origin);
+  assert.deepEqual(constraints.map(c=>c.origin),['POA','POT1']);
+  assert.deepEqual(constraints[1].refs,[C.midpointRef(edge(2))]);
+  const map=new Map([[1,rectangle],[2,moved]]);
+  for(const constraint of constraints) assert.ok(C.satisfied(map,constraint));
+  assert.equal(C.solve([rectangle,previous],constraints,new Set([1,2])),null);
+  assert.equal(C.automatic([rectangle,moved],[rectangle,moved],constraints,origins).length,2);
+});
+
 test('the center of a circular arc can coincide with the absolute origin',()=>{
   const arc={...G.arc([-5,0],[0,5],[5,0]),id:1,layer:'0'};
   const [constraint]=C.automatic([],[arc],[],()=>[{name:'POA',target:[0,0]}]);
@@ -451,6 +465,19 @@ test('a rectangle starts perpendicular and can be coted and moved as a group',()
   assertSolved([transformed],[...defaults,...dims],new Set([1]));
   const square=dimension('angle',[edge(1),edge(1,1)],90);
   assert.equal(C.dimensionCanDrive([sized],defaults,{...square,rays:[1,1]}),false);
+});
+
+test('a two-corner rectangle constrains the upper edge for each drawing direction',()=>{
+  for(const x of [-12,12]) for(const y of [-8,8]) {
+    const entity={...G.shape('rect',[[3,4],[3+x,4+y]]),id:1,layer:'0'};
+    const constraints=C.shapeConstraints(entity,'rectCorners');
+    assert.equal(constraints.filter(c=>c.type==='perpendicular').length,3);
+    const [horizontal]=constraints.filter(c=>c.type==='horizontal');
+    const entities=new Map([[1,entity]]);
+    const top=C.resolve(entities,horizontal.refs[0]);
+    assert.ok(top.p.every(p=>p[1]===Math.max(4,4+y)));
+    assert.ok(constraints.every(c=>C.satisfied(entities,c)));
+  }
 });
 
 test('a regular hexagon changes size while preserving equal edges and its 120 degree corners',()=>{

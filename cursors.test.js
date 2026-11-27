@@ -26,6 +26,19 @@ test('scale cursor keeps its center and changes from hover to directional drag',
   assert.match(decodeURIComponent(drag),/rotate\(90 16 16\)/);
 });
 
+test('precision mode uses the arrow tip as its hotspot and keeps classic preferences',()=>{
+  const saved={shapes:{select:'pointerCorner'},colors:{select:'#123ABC'}};
+  const precision=C.normalize(saved);
+  assert.equal(precision.mode,'precision');
+  const pointer=decodeURIComponent(C.precisionCss('select',precision));
+  assert.match(pointer,/d="M3 3[^"]+" fill="#123ABC"/);
+  assert.ok(pointer.endsWith('3 3, default'));
+  const classic=C.normalize({...precision,mode:'classic'});
+  assert.equal(classic.mode,'classic');
+  assert.equal(classic.shapes.select,'pointerCorner');
+  assert.equal(classic.colors.select,'#123ABC');
+});
+
 test('snap indicators prefer the upper-right corner until the drawing occupies it',()=>{
   const S=C.SnapIndicators;
   assert.equal(S.normalize().corner,'ne');

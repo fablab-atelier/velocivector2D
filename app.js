@@ -15,6 +15,7 @@ const definitions = {
   origin:['⊕','Origine de travail','J','Cliquez pour créer un POT ou saisissez ses coordonnées par rapport au POA.'],
   point:['•','Point de construction','N','Cliquez pour placer un point de construction. Il est conservé dans le projet.'],
   offset:['⇉','Décalage de tracé','K','Sélectionnez les tracés, choisissez la distance et le côté, puis créez le décalage.'],
+  text:['T','Texte','T','Saisissez le texte puis cliquez dans le dessin pour le poser. Double-cliquez sur un texte pour le modifier.'],
   dimension:['↔','Cotation intelligente','I','Choisissez une géométrie ou deux références, puis posez la cote.']
 };
 const shortcutCatalog={
@@ -89,12 +90,18 @@ function shortcutText(value) {
 function saveShortcuts() {
   try {localStorage.setItem('velocivector-shortcuts',JSON.stringify({keys:shortcuts,gestures:gestureKeys}));} catch {}
   updateShortcutTitles();
+  if($('helpDialog').open) showHelpSection(activeHelpSection);
   $('help').textContent=toolHint(tool);
   update();
 }
 function updateShortcutTitles() {
   const titles={fit:I18n.t('Tout voir'),undo:I18n.t('Annuler'),redo:I18n.t('Rétablir')};
   for(const [id,label] of Object.entries(titles)) $(id).title=label+' ('+shortcutText(shortcuts[id])+')';
+  for(const id of ['open','save','saveAs']) {
+    const key=$(id).querySelector('kbd');
+    key.hidden=!shortcuts[id];
+    key.textContent=shortcuts[id]?shortcutText(shortcuts[id]):'';
+  }
   $('frameReadout').title=I18n.t('Arrondi des dimensions · Tab : 1 mm · Maj + Tab : 10 mm');
   for(const button of $('tools').children) {
     const id=button.dataset.tool, variant=toolForMethod(id), label=I18n.t(definitions[variant][1]);
@@ -239,7 +246,7 @@ try {
 function saveConstructionPreferences() {
   try {localStorage.setItem('velocivector-construction',JSON.stringify({style:constructionStyle,opacity:constructionOpacity}));} catch {}
 }
-const drawingUsesConstruction=()=>!['select','dimension','origin','point'].includes(tool);
+const drawingUsesConstruction=()=>!['select','dimension','origin','point','text'].includes(tool);
 const draftStyle=()=>drawConstruction?constructionStyle:null;
 const styledDraft=e=>G.withConstruction(e,draftStyle());
 function styledDraftParts(e,styles) {
@@ -520,8 +527,9 @@ function update() {
   }
   const angle=focus?angleLabel(Edit.bearing(Edit.edges(focus.entity)[focus.index])):null;
   $('hint').textContent=command
-    ? I18n.t(Formal.names[constraintMode])+' · '+constraintPrompt(constraintMode,formalTargets.length)+I18n.t(' · Échap pour quitter')
-    : angle?'Orientation '+angle+I18n.t(' · Clic droit pour afficher les contraintes')
+    ? I18n.t(Formal.names[constraintMode])+' · '+constraintPrompt(constraintMode,formalTargets.length)+
+      (shortcuts.exit?I18n.t(' · Quitter ({exit})',{exit:shortcutText(shortcuts.exit)}):'')
+    : angle?I18n.t('Orientation {angle} · Clic droit pour afficher les contraintes',{angle})
       : knot?I18n.t('Glissez le point pour le déplacer, ou un bras pour régler son angle et sa longueur.'):
         tool==='dimension'?dimensionHint():toolHint(tool);
   updateModification();
@@ -531,6 +539,7 @@ function update() {
   if(tool==='offset') $('applyOffset').disabled=!selected().length||!offsetSides().length;
   updateClipboardOptions();
   drawLayers();
+  updateTextPanel();
   if(rasterMode) $('hint').textContent=rasterHint();
   requestDraw();
 }
@@ -591,6 +600,7 @@ function history(back) {
   const source=back?undo:redo, target=back?redo:undo;
   if(!source.length) return;
   const fields=captureCoordinateFields();
+  finishInlineText(false);textDraft=null;textPicking=null;textSelection=null;
   const next=source.pop(), renamed=layerRenames.get(back?doc:next);
   if(renamed&&activeLayer===(back?renamed.name:renamed.previous)) activeLayer=back?renamed.previous:renamed.name;
   if(rasterMode) setRasterMode();
@@ -611,7 +621,8 @@ function add(entities,axes=[],relations=[]) {
   if(layer.raster) {message(I18n.t('Choisissez un calque vectoriel pour dessiner.'));return false;}
   if(!layer.visible) {message(I18n.t('Affichez le calque actif avant de dessiner.'));return false;}
   const additions=entities.map(e=>identity({...e,layer:activeLayer}));
-  const defaults=additions.flatMap(e=>Formal.shapeConstraints(e,tool));
+  const shapeTool=tool==='rect'&&rectangleMethod==='corners'?'rectCorners':tool;
+  const defaults=additions.flatMap(e=>Formal.shapeConstraints(e,shapeTool));
   if(additions.length===1) {
     const [entity]=additions;
     defaults.push(...axisConstraints(axes.map(axis=>({...axis,id:entity.id}))));
@@ -662,9 +673,12 @@ function choose(id) {
   $('toolName').textContent=I18n.t(definitions[id][1]);
   $('help').textContent=toolHint(id);
   $('hint').textContent=toolHint(id);
-  $('point').hidden=['select','dimension','offset'].includes(id);
+  $('point').hidden=['select','dimension','offset','text'].includes(id);
   $('offsetOptions').hidden=id!=='offset';
   $('dimensionOptions').hidden=id!=='dimension';
+  if(id!=='text') {finishInlineText(true);textDraft=null;textPicking=null;}
+  if(id!=='text'&&id!=='select') textSelection=null;
+  if(id==='text') {selection.clear();segmentSelection.clear();}
   if(id==='dimension') {
     const [item]=dimensionItems;
     const seed=before.length?before:
@@ -713,10 +727,13 @@ function updateToolShortcutHint() {
     bind('transform:auto',I18n.t('Mode automatique'));
     bind('transform:move',I18n.t('Déplacement'));
     bind('transform:scale',I18n.t('Mise à l’échelle'));
-    bind('transform:rotate','Rotation');
+    bind('transform:rotate',I18n.t('Rotation'));
   };
   if(rasterMode) {
-    if(rasterMode==='rotate') rows.push([I18n.t('Maj'),I18n.t('Rotation par pas de 15°')],['Ctrl',I18n.t('Rotation fine × ¼')]);
+    if(rasterMode==='rotate') {
+      gesture('shiftKey',I18n.t('Rotation par pas de 15°'));
+      gesture('ctrlKey',I18n.t('Rotation fine × ¼'));
+    }
   } else if(constraintMode) {
     bind('constraint:'+constraintMode,I18n.t('Désactiver la contrainte'));
   } else if(modification) {
@@ -970,12 +987,13 @@ function rasterPointerDown(event) {
 function updateRasterRotation(event,position) {
   const turn=rasterRotation;
   if(!turn) return;
+  const mod=pointerModifiers(event);
   if(position) {
     const lever=Math.max(25,Math.abs((turn.last[1]+position[1])/2-turn.start[1]));
-    turn.raw-=(position[0]-turn.last[0])*180/(Math.PI*lever*(event.ctrlKey?4:1));
+    turn.raw-=(position[0]-turn.last[0])*180/(Math.PI*lever*(mod.ctrlKey?4:1));
     turn.last=position;
   }
-  turn.degrees=event.shiftKey?Math.round(turn.raw/15)*15:turn.raw;
+  turn.degrees=mod.shiftKey?Math.round(turn.raw/15)*15:turn.raw;
   requestDraw();
 }
 function applyRasterTransform(layer,image) {
@@ -1242,8 +1260,9 @@ $('renameLayerForm').onsubmit=event=>{
   if(selectedOrigin?.layer===previous) selectedOrigin={...selectedOrigin,layer:name};
   if(dimensionSelectionPoint?.layer===previous) dimensionSelectionPoint=rename(dimensionSelectionPoint);
   if(rasterMode) setRasterMode();
+  if(textDraft?.layer===previous) textDraft={...textDraft,layer:name};
   commit(d=>({...d,layers:d.layers.map(layer=>layer.name===previous?{...layer,name}:layer),
-    entities:d.entities.map(rename),constraints:(d.constraints??[]).map(rename)}),false,false,true);
+    entities:d.entities.map(rename),...(d.texts?{texts:d.texts.map(rename)}:{}),constraints:(d.constraints??[]).map(rename)}),false,false,true);
   layerRenames.set(doc,{previous,name});
   restoreCoordinateFields(fields);
   message(I18n.t('Calque renommé en « {name} ».',{name}));
@@ -1251,7 +1270,7 @@ $('renameLayerForm').onsubmit=event=>{
 function askRemoveLayer(name) {
   const destinations=doc.layers.filter(layer=>layer.name!==name&&!layer.raster);
   if(!destinations.length) {message(I18n.t('Le dessin doit conserver au moins un calque vectoriel.'));return;}
-  const count=doc.entities.filter(entity=>entity.layer===name).length;
+  const count=doc.entities.filter(entity=>entity.layer===name).length+(doc.texts??[]).filter(text=>text.layer===name).length;
   if(!count) {removeLayer(name);return;}
   const dialog=$('removeLayerDialog');
   dialog.dataset.layer=name;
@@ -1287,7 +1306,9 @@ function removeLayer(name,destination) {
     for(const id of removed) {selection.delete(id);segmentSelection.delete(id);}
     formalSelection=[];formalTargets=[];dimensionRefs=[];dimensionRound=null;
   }
-  commit(d=>({...d,layers,entities,constraints}),false,false,true);
+  if(textDraft?.layer===name) {textDraft=null;textPicking=null;}
+  const texts=(doc.texts??[]).flatMap(text=>text.layer===name?destination?[{...text,layer:destination}]:[]:[text]);
+  commit(d=>({...d,layers,entities,constraints,...(d.texts?{texts}:{})}),false,false,true);
   restoreCoordinateFields(fields);
   animateRemoval(lost,before);
   message(I18n.t('Calque « {name} » supprimé.',{name}));
@@ -1395,6 +1416,374 @@ function drawGeometryHover(ink) {
     context.restore();
   }
 }
+const cadTextFields={content:'cadTextContent',family:'cadTextFont',align:'cadTextAlign',height:'cadTextHeight',
+  letter:'cadTextLetter',line:'cadTextLine',width:'cadTextWidth',angle:'cadTextAngle',pathMode:'cadTextPath',
+  radius:'cadTextRadius',along:'cadTextAlong',offset:'cadTextOffset'};
+const cadTextMeasure=document.createElement('canvas').getContext('2d');
+const cadTextDefaults={content:'',family:'Arial',align:'left',height:5,letter:0,line:2,width:100,angle:0,
+  pathMode:'straight',radius:0,along:0,offset:0};
+let textDraft=null,textPicking=null,textSelection=null,inlineText=null,textCaretClick=false;
+const cadInlineEditor=$('cadInlineEditor');
+let cadFontChoices=[];
+const cadLocalFonts=new Map(), cadFontLoads=new Map();
+function prepareCadFont(family) {
+  const entry=cadLocalFonts.get(family);
+  if(!entry||typeof FontFace!=='function') return;
+  if(!cadFontLoads.has(family)) {
+    const load=(async()=>{
+      try {
+        const source=await entry.blob();
+        const face=new FontFace(family,await source.arrayBuffer());
+        document.fonts.add(await face.load());
+        requestDraw();
+      } catch {cadFontLoads.delete(family);}
+    })();
+    cadFontLoads.set(family,load);
+  }
+  return cadFontLoads.get(family);
+}
+const cadFontFamily=name=>TextGeometry.font(name).replace(/^\d+px /,'');
+function syncCadFontChoice() {
+  const name=$('cadTextFont').value.trim()||'Arial', current=$('cadFontCurrent');
+  current.textContent=name;
+  current.style.fontFamily=cadFontFamily(name);
+  $('cadCustomFontRow').hidden=cadFontChoices.includes(name);
+  for(const row of $('cadFontList').children) row.setAttribute('aria-pressed',String(row.dataset.font===name));
+}
+function showCadFonts(fonts) {
+  cadFontChoices=[...new Set(fonts.filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  $('cadFontList').replaceChildren(...[...cadFontChoices,''].map(name=>{
+    const button=document.createElement('button');
+    button.type='button';button.dataset.font=name;
+    button.textContent=name||I18n.t('Autre police…');
+    if(name) button.style.fontFamily=cadFontFamily(name);
+    button.onclick=()=>{
+      if(name) {
+        $('cadTextFont').value=name;
+        syncCadFontChoice();
+        prepareCadFont(name);
+        if(textDraft?.id) applyCadText();else requestDraw();
+      } else {
+        $('cadFontMenu').open=false;
+        $('cadCustomFontRow').hidden=false;
+        $('cadTextFont').focus();
+        $('cadTextFont').select();
+      }
+    };
+    return button;
+  }));
+  syncCadFontChoice();
+}
+const cadFontStorageKey='velocivector-local-font-families';
+function readSavedCadFonts() {
+  try {
+    const families=JSON.parse(localStorage.getItem(cadFontStorageKey)??'[]');
+    return Array.isArray(families)?families.filter(name=>typeof name==='string'&&name.trim()&&name.length<=128):[];
+  } catch {return [];}
+}
+function updateCadFontRefresh(hasLocalFonts) {
+  const button=$('listCadFonts');
+  const label=I18n.t(hasLocalFonts?'Actualiser les polices locales':'Lister les polices locales');
+  button.title=label;
+  button.setAttribute('aria-label',label);
+}
+function showCadFontCatalog(families) {
+  showCadFonts([...TextGeometry.fonts,...families]);
+  updateCadFontRefresh(Boolean(families.length));
+}
+showCadFontCatalog(readSavedCadFonts());
+$('cadTextFont').onchange=()=>{syncCadFontChoice();if(textDraft?.id) applyCadText();};
+$('listCadFonts').hidden=typeof window.queryLocalFonts!=='function';
+$('listCadFonts').onclick=async()=>{
+  const button=$('listCadFonts');
+  button.disabled=true;
+  try {
+    const available=await window.queryLocalFonts();
+    cadLocalFonts.clear();
+    for(const item of available) if(item.family&&(!cadLocalFonts.has(item.family)||/^(regular|normal|book)$/i.test(item.style)))
+      cadLocalFonts.set(item.family,item);
+    const families=[...cadLocalFonts.keys()];
+    prepareCadFont($('cadTextFont').value);
+    try {localStorage.setItem(cadFontStorageKey,JSON.stringify(families));} catch {}
+    showCadFontCatalog(families);
+    $('cadFontStatus').value=I18n.t('{count} polices locales accessibles.',{count:families.length});
+    $('cadFontMenu').open=true;
+    $('cadFontMenu').querySelector('summary').focus();
+  } catch {
+    $('cadFontStatus').value=I18n.t('La liste des polices locales n’est pas accessible. Vous pouvez saisir le nom d’une police.');
+  } finally {button.disabled=false;}
+};
+function updateTextPanel() {
+  $('textOptions').hidden=tool!=='text';
+  $('textPathOptions').hidden=$('cadTextPath').value==='straight';
+  const linked=$('cadTextPath').value==='linked';
+  $('pickCadTextPath').hidden=!linked;
+  const curve=linked&&doc.entities.find(entity=>entity.id===textDraft?.pathId);
+  $('cadTextRadius').disabled=Boolean(curve&&!['circle','arc'].includes(curve.type));
+  $('pickCadTextPath').classList.toggle('active',textPicking==='path');
+  $('moveCadText').disabled=!textDraft?.p;
+  $('moveCadText').classList.toggle('active',textPicking==='move');
+  $('deleteCadText').disabled=!textDraft?.id;
+}
+function cadTextValues() {
+  const values={...textDraft};
+  for(const [key,id] of Object.entries(cadTextFields)) {
+    const field=$(id);
+    values[key]=typeof cadTextDefaults[key]==='number'?field.valueAsNumber:field.value;
+  }
+  values.family=values.family.trim()||'Arial';
+  values.reverse=$('cadTextReverse').checked;
+  values.upright=$('cadTextOrientation').value==='upright';
+  values.inside=$('cadTextSide').value==='inside';
+  return {...values,fraction:values.fraction??0};
+}
+function cadTextValid(text) {
+  return text.p?.every(q=>Number.isFinite(q)&&Math.abs(q)<=1e12)&&
+    Object.keys(cadTextDefaults).filter(key=>typeof cadTextDefaults[key]==='number').every(key=>Number.isFinite(text[key])&&Math.abs(text[key])<=1e12)&&
+    text.height>0&&text.width>0&&text.line>=0&&text.radius>=0;
+}
+function loadCadText(text) {
+  textDraft={...text};
+  textPicking=null;
+  for(const [key,id] of Object.entries(cadTextFields)) $(id).value=text[key];
+  syncCadFontChoice();
+  prepareCadFont(text.family);
+  textSelection=text.id;
+  $('cadTextReverse').checked=text.reverse;
+  $('cadTextOrientation').value=text.upright?'upright':'tangent';
+  $('cadTextSide').value=text.inside?'inside':'outside';
+  update();
+}
+function applyCadText() {
+  const text=cadTextValues(), layer=textDraft?.id?textDraft.layer:activeLayer;
+  if(!doc.layers.some(item=>item.name===layer&&item.visible&&!item.raster)) {
+    message(I18n.t('Choisissez un calque vectoriel pour dessiner.'));return false;
+  }
+  if(!text.content.trim()||!cadTextValid(text)||text.pathMode==='arc'&&text.radius<=0) {
+    message(I18n.t('Saisissez le texte et ses réglages, puis cliquez dans le dessin pour le placer.'));return false;
+  }
+  if(text.pathMode==='linked'&&!doc.entities.some(entity=>entity.id===text.pathId)) {
+    textPicking='path';updateTextPanel();
+    message(I18n.t('Cliquez sur la courbe qui doit supporter le texte.'));return false;
+  }
+  const items=doc.texts??[], id=text.id??items.reduce((max,item)=>Math.max(max,item.id),0)+1;
+  const next={...text,id,layer};
+  if(next.pathMode!=='linked') delete next.pathId;
+  const original=items.find(item=>item.id===id);
+  if(original&&Object.keys(next).length===Object.keys(original).length&&Object.entries(next).every(([key,value])=>
+    key==='p'?G.dist(value,original.p)<=G.eps:value===original[key])) return true;
+  commit(d=>({...d,texts:items.some(item=>item.id===id)?items.map(item=>item.id===id?next:item):[...items,next]}),false);
+  textDraft=next;textSelection=id;textPicking=null;updateTextPanel();
+  message(I18n.t('Texte appliqué.'));
+  return true;
+}
+function deleteCadText() {
+  const id=textDraft?.id??textSelection;
+  if(!id||!(doc.texts??[]).some(item=>item.id===id)) return;
+  finishInlineText(false);
+  textDraft=null;textPicking=null;textSelection=null;
+  $('cadTextContent').value='';
+  commit(d=>({...d,texts:(d.texts??[]).filter(item=>item.id!==id)}),false);
+}
+$('textOptions').onsubmit=event=>{event.preventDefault();applyCadText();};
+$('textOptions').addEventListener('keydown',event=>{
+  if(event.key==='Enter') event.stopPropagation();
+});
+$('textOptions').oninput=()=>{
+  if($('cadTextPath').value==='arc'&&!$('cadTextRadius').valueAsNumber) $('cadTextRadius').value=30;
+  if($('cadTextPath').value!=='linked'&&textPicking==='path') textPicking=null;
+  updateTextPanel();requestDraw();
+};
+$('newCadText').onclick=()=>{
+  textDraft=null;textPicking=null;$('cadTextContent').value='';$('cadTextContent').focus();update();
+};
+$('pickCadTextPath').onclick=()=>{
+  textPicking='path';updateTextPanel();message(I18n.t('Cliquez sur la courbe qui doit supporter le texte.'));
+};
+$('moveCadText').onclick=()=>{
+  textPicking=$('cadTextPath').value==='linked'?'path':'move';updateTextPanel();
+  message(I18n.t('Cliquez dans le dessin pour repositionner le texte.'));
+};
+$('deleteCadText').onclick=deleteCadText;
+function refreshInlineCaret() {
+  if(!inlineText) return;
+  inlineText.visible=true;
+  clearInterval(inlineText.timer);
+  inlineText.timer=setInterval(()=>{
+    if(!inlineText) return;
+    inlineText.visible=!inlineText.visible;
+    requestDraw();
+  },530);
+  requestDraw();
+}
+function startInlineText(position,caret) {
+  if(!$('cadTextContent').value&&textDraft?.id) return;
+  inlineText={position,original:$('cadTextContent').value,visible:true,timer:null};
+  cadInlineEditor.value=inlineText.original;
+  const [x,y]=screen(position);
+  cadInlineEditor.style.left=x+'px';cadInlineEditor.style.top=y+'px';
+  cadInlineEditor.hidden=false;
+  cadInlineEditor.focus({preventScroll:true});
+  const index=caret??cadInlineEditor.value.length;
+  cadInlineEditor.setSelectionRange(index,index);
+  refreshInlineCaret();
+}
+function finishInlineText(save) {
+  if(!inlineText) return;
+  const {original,timer}=inlineText;
+  clearInterval(timer);
+  inlineText=null;
+  $('cadTextContent').value=save&&cadInlineEditor.value.trim()?cadInlineEditor.value:original;
+  cadInlineEditor.hidden=true;
+  if(save&&$('cadTextContent').value.trim()&&(!textDraft?.id||$('cadTextContent').value!==original)) applyCadText();
+  requestDraw();
+}
+cadInlineEditor.oninput=()=>{
+  $('cadTextContent').value=cadInlineEditor.value;
+  refreshInlineCaret();
+};
+cadInlineEditor.onblur=()=>finishInlineText(true);
+cadInlineEditor.onselect=refreshInlineCaret;
+cadInlineEditor.onkeyup=refreshInlineCaret;
+cadInlineEditor.onkeydown=event=>{
+  event.stopPropagation();
+  if(event.isComposing) return;
+  if(event.key==='Escape'||event.key==='Enter'&&(event.ctrlKey||event.metaKey)) {
+    event.preventDefault();finishInlineText(event.key==='Enter');
+  }
+};
+function cadCaretAt(text,at) {
+  const entities=new Map(doc.entities.map(entity=>[entity.id,entity])), p=world(at), carets=[];
+  const glyphs=cadTextLayout(text,entities,carets);
+  const character=glyphs.find(glyph=>cadGlyphContains(glyph,p,0));
+  const inside=Boolean(character);
+  let nearest=Infinity,result=null;
+  for(const caret of carets) {
+    const end=G.add(caret.q,G.polar([0,0],caret.height,caret.angle+Math.PI/2));
+    const distance=G.dist(p,G.nearest(caret.q,end,p));
+    if(distance<nearest) {nearest=distance;result={index:caret.index,distance,inside,character:character?.index};}
+  }
+  return result;
+}
+function positionCadCaret(at,anchor=null) {
+  const caret=cadCaretAt(cadTextValues(),at);
+  if(!caret) return;
+  const start=anchor??caret.index,end=caret.index;
+  cadInlineEditor.setSelectionRange(Math.min(start,end),Math.max(start,end),end<start?'backward':'forward');
+  refreshInlineCaret();
+}
+function paintCadCaret(carets,ink) {
+  const {selectionStart:start,selectionEnd:end,selectionDirection}=cadInlineEditor;
+  const index=selectionDirection==='backward'?start:end;
+  const caret=carets.find(item=>item.index===index)??carets.reduce((best,item)=>
+    !best||Math.abs(item.index-index)<Math.abs(best.index-index)?item:best,null);
+  if(!caret) return;
+  const [x,y]=screen(caret.q);
+  cadInlineEditor.style.left=x+'px';cadInlineEditor.style.top=y+'px';
+  if(inlineText.visible) stroke([[x,y],screen(G.add(caret.q,G.polar([0,0],caret.height,caret.angle+Math.PI/2)))],ink.point,1.5);
+}
+function startCadTextDrag(event,start,text) {
+  finishInlineText(true);
+  text=(doc.texts??[]).find(item=>item.id===text.id)??text;
+  selection.clear();segmentSelection.clear();selectedConstraint=null;selectedDimension=null;
+  textSelection=text.id;
+  drag={kind:'textMove',text,start,id:event.pointerId,preview:null};
+  cursorPoint=start;canvas.setPointerCapture(event.pointerId);requestDraw();
+}
+function movedCadText(action,at) {
+  const {text,start}=action, delta=G.sub(world(at),world(start));
+  const p=G.add(text.p,delta);
+  if(text.pathMode==='linked') {
+    const entity=doc.entities.find(item=>item.id===text.pathId);
+    const path=TextGeometry.course(entity,text.radius/Formats.millimeters[doc.units],32);
+    if(path) {
+      const anchor=path.at(path.length*text.fraction).q;
+      return {...text,fraction:path.pick(G.add(anchor,delta))};
+    }
+  }
+  return {...text,p};
+}
+function finishCadTextDrag(action,at,distance) {
+  if(distance<=4) {
+    if(tool==='text') loadCadText(action.text);
+    else update();
+    return;
+  }
+  const text=movedCadText(action,at);
+  if(!cadTextValid(text)) return;
+  if(textDraft?.id===text.id) textDraft=text;
+  commit(d=>({...d,texts:(d.texts??[]).map(item=>item.id===text.id?text:item)}),false);
+}
+function clickCadText(at) {
+  const p=world(at), linked=$('cadTextPath').value==='linked';
+  if(textPicking==='path'||linked&&!textDraft?.pathId) {
+    const entity=hit(p).find(item=>item.type!=='point');
+    const path=TextGeometry.course(entity,0,32);
+    if(!path) {message(I18n.t('Cliquez sur la courbe qui doit supporter le texte.'));return;}
+    textDraft={...textDraft,p,pathId:entity.id,fraction:path.pick(p)};
+  } else if(!textPicking) {
+    const existing=textAt(at);
+    if(existing) {loadCadText(existing);return;}
+    if(textDraft?.id) {
+      $('cadTextContent').value='';
+      textSelection=null;textDraft=null;
+    }
+    textDraft={...textDraft,p};
+  } else textDraft={...textDraft,p};
+  textPicking=null;
+  if($('cadTextContent').value.trim()) applyCadText();
+  else {startInlineText(p);update();}
+}
+function cadTextLayout(text,entities,carets) {
+  return TextGeometry.layout(text,entities,cadTextMeasure,Formats.millimeters[doc.units],carets);
+}
+function drawCadTexts(ink) {
+  if(!doc.texts?.length&&tool!=='text') return;
+  const entities=new Map(doc.entities.map(entity=>[entity.id,drag?.changes?.get(entity.id)??entity]));
+  const moving=drag?.kind==='textMove'?drag.preview:null;
+  const draft=tool==='text'?cadTextValues():null, texts=doc.texts??[];
+  const show=(text,color,editing=false)=>{
+    if(!cadTextValid(text)||!editing&&!text.content.trim()) return;
+    const carets=editing?[]:undefined;
+    context.save();context.font=TextGeometry.font(text.family);context.fillStyle=color;
+    context.textAlign='left';context.textBaseline='alphabetic';
+    for(const glyph of cadTextLayout(text,entities,carets)) {
+      context.save();context.translate(...screen(glyph.q));context.rotate(-glyph.angle);
+      context.scale(glyph.sx*camera.scale,glyph.sy*camera.scale);
+      if(editing&&glyph.index>=cadInlineEditor.selectionStart&&glyph.index<cadInlineEditor.selectionEnd) {
+        context.fillStyle=ink.point;context.globalAlpha=.28;
+        context.fillRect(-glyph.half,-glyph.metrics.actualBoundingBoxAscent,glyph.metrics.width,
+          glyph.metrics.actualBoundingBoxAscent+glyph.metrics.actualBoundingBoxDescent);
+        context.globalAlpha=1;context.fillStyle=color;
+      }
+      context.fillText(glyph.value,-glyph.half,0);context.restore();
+    }
+    context.restore();
+    if(editing) paintCadCaret(carets,ink);
+  };
+  for(const text of texts) {
+    const layer=doc.layers.find(item=>item.name===text.layer);
+    if(!layer?.visible||moving?.id===text.id||draft?.id===text.id&&cadTextValid(draft)&&(inlineText||draft.content.trim())) continue;
+    show(text,textSelection===text.id?ink.selection:layer.color==='#000000'&&theme==='dark'?ink.defaultInk:layer.color);
+  }
+  if(moving) show(moving,ink.selection);
+  else if(draft?.p) show(draft,ink.selection,Boolean(inlineText));
+  else if(draft&&cursorPoint&&!textPicking&&draft.pathMode!=='linked'&&
+    doc.layers.some(layer=>layer.name===activeLayer&&layer.visible&&!layer.raster))
+    show({...draft,p:world(cursorPoint)},ink.preview);
+}
+function cadGlyphContains(glyph,p,margin) {
+  const [x,y]=G.sub(p,glyph.q),c=Math.cos(glyph.angle),s=Math.sin(glyph.angle);
+  const u=(x*c+y*s)/glyph.sx+glyph.half,v=(x*s-y*c)/glyph.sy,m=glyph.metrics;
+  return u>=-m.actualBoundingBoxLeft-margin/glyph.sx&&u<=m.actualBoundingBoxRight+margin/glyph.sx&&
+    v>=-m.actualBoundingBoxAscent-margin/glyph.sy&&v<=m.actualBoundingBoxDescent+margin/glyph.sy;
+}
+function textAt(at) {
+  const p=world(at), entities=new Map(doc.entities.map(entity=>[entity.id,entity]));
+  const margin=5/camera.scale;
+  return (doc.texts??[]).findLast(text=>doc.layers.some(layer=>layer.name===text.layer&&layer.visible)&&
+    cadTextLayout(text,entities).some(glyph=>cadGlyphContains(glyph,p,margin)));
+}
 function draw() {
   pending=false;
   updatePrecisionIcons();
@@ -1457,6 +1846,7 @@ function draw() {
       }
     });
   }
+  drawCadTexts(ink);
   drawGeometryHover(ink);
   if(tool==='select'&&(!modification||modification.transform&&modification.type!=='scale')&&!constraintMode) drawSelectionFrame(ink);
   const knot=focusedKnot();
@@ -1575,7 +1965,7 @@ function draw() {
     context.strokeRect(x-4,y-4,8,8);
   }
   updateSnapIndicator(previewPoints,pointDrag);
-  if(constraintMode!==null && hover) {
+  if(constraintMode!==null && hover && cursorPreferences.mode==='classic') {
     const [x,y]=screen(hover);
     drawConstraintBadge(constraintMode,x+12,y-22,ink);
   }
@@ -1864,7 +2254,7 @@ function snapped(p,allowSelect=false) {
   candidates.sort((a,b)=>a.d-b.d);
   const unique=candidates.filter(({q},i)=>!i || !candidates.slice(0,i).some(other=>G.dist(q,other.q)*camera.scale<.1));
   if(unique.length) activeSnap=unique[snapIndex%unique.length];
-  else if($('gridSnap').checked) {
+  if(!activeSnap&&$('gridSnap').checked) {
     const step=$('spacing').valueAsNumber;
     if(step>0) activeSnap={q:gridPoint(p,step),kind:'grid'};
   }
@@ -1889,7 +2279,9 @@ function draftSnapExtra(snap,staged=false) {
   if(isPath&&endsNow&&target?.layer===activeLayer&&snapIsEndpoint(target,snap.q)&&uniqueJoinTarget(target,snap.q)) return 'join';
   const storesPoint=tool==='point'||tool==='rect'&&(rectangleMethod==='corners'||count===1)||tool==='bezier'||polylineTool()&&(!arcMode||count!==1)||
     (tool==='circle'||tool==='ellipse')&&count===0||tool==='arc'&&(arcMethod==='center'||count<2);
-  return storesPoint&&$('autoCoincidence').checked?'coincidence':null;
+  const storesOriginPoint=snap.kind==='origin'&&(tool==='rect'||tool==='slot'&&count<2||
+    tool==='polygon');
+  return (storesPoint||storesOriginPoint)&&$('autoCoincidence').checked?'coincidence':null;
 }
 const snapIndicatorColor=()=>cursorPreferences.colors[modification?.type??constraintMode??tool]??cursorPreferences.colors.select;
 function updatePrecisionIcons() {
@@ -1901,6 +2293,8 @@ function updatePrecisionIcons() {
 }
 function updateSnapIndicator(previewPoints,pointDrag) {
   const indicator=$('snapIndicator');
+  const action=cursorPreferences.mode==='precision'&&tool!=='text'&&currentCanvasCursor?.tool!=='text'&&currentCanvasCursor?.behavior?
+    cursorActionBadge(currentCanvasCursor):null;
   const dragged=drag?.snapAt&&cursorPoint&&G.dist(drag.snapAt,cursorPoint)<=2?drag.snapIndicator:null;
   const dimensionBadge=tool==='dimension'&&(!drag||drag.kind==='dimension');
   const allowSnap=!suspended&&$('snap').checked&&(!drag||drag.kind==='point'||drag.kind==='modifyAction'||dragged);
@@ -1909,6 +2303,7 @@ function updateSnapIndicator(previewPoints,pointDrag) {
   const extra=snap&&(dragged?snap.extra:draftSnapExtra(snap,Boolean(pointDrag?.held&&pointDrag.captureStart)));
   const kinds=[snap?.kind,extra].filter(kind=>kind&&snapPreferences.enabled[kind]);
   if(dimensionBadge) kinds.unshift('dimension');
+  if(action&&!dimensionBadge) kinds.unshift('action');
   if(!cursorPoint||!kinds.length) {indicator.hidden=true;previousSnapCorner=null;return;}
   const paths=[];
   const add=(points,weight)=>{
@@ -1924,7 +2319,7 @@ function updateSnapIndicator(previewPoints,pointDrag) {
     if(p.some((n,i)=>n<min[i]-margin||n>max[i]+margin)) return;
     add(G.trace(entity,camera.scale),weight);
   };
-  if(dragged) {
+  if(dragged||action&&drag?.changes) {
     for(const e of drag.changes?.values()??[]) traced(e,3);
   } else if(snap&&previewPoints.length) {
     if(tool==='bezier') {
@@ -1945,12 +2340,12 @@ function updateSnapIndicator(previewPoints,pointDrag) {
   const spot=SnapIndicators.placement(cursorPoint,viewport,paths,kinds.length,snapPreferences.corner,previousSnapCorner);
   previousSnapCorner=spot.corner;
   const color=snapIndicatorColor();
-  const key=kinds.join('/')+(kinds.some(kind=>kind==='coincidence'||kind==='dimension')?color:'');
+  const key=kinds.join('/')+(kinds.some(kind=>kind==='coincidence'||kind==='dimension')?color:'')+(action??'');
   if(snapIconKey!==key) {
     snapIconKey=key;
     indicator.replaceChildren(...kinds.map(kind=>{
       const image=document.createElement('img');image.alt='';
-      image.src=kind==='dimension'?toolIconSource('dimension'):SnapIndicators.image(kind,color);
+      image.src=kind==='action'?action:kind==='dimension'?toolIconSource('dimension'):SnapIndicators.image(kind,color);
       return image;
     }));
   }
@@ -2151,12 +2546,18 @@ function replaceSelected(fn,join=true,rebind=false,removedSegments,bindCut=null,
   for(const [id,indices] of previousSegments) segmentSelection.set(id,indices);
   update();return false;
 }
-function replaceSelectedRuns(operation) {
+function replaceSelectedRuns(operation,extract=false) {
   const outputs=new Map(), counts=new Map();
   for(const e of selected()) {
-    const indices=segmentSelection.get(e.id), runs=Edit.selectedRuns(e,indices);
+    const parts=G.strokeParts(e);
+    const selectedIndices=segmentSelection.get(e.id);
+    const indices=extract&&!constructionShown(e.layer)&&parts.length?
+      new Set([...(selectedIndices??parts.keys())].filter(i=>!G.constructionAt(e,i))):selectedIndices;
+    const runs=Edit.selectedRuns(e,indices);
     const modified=runs.flatMap(run=>operation(run)??[run]);
-    if(modified.length===runs.length&&modified.every((run,i)=>run===runs[i])) continue;
+    const extractsSubset=extract&&indices&&indices.size<parts.length;
+    const unchanged=modified.length===runs.length&&modified.every((run,i)=>run===runs[i]);
+    if(!modified.length||unchanged&&!extractsSubset) continue;
     const remainder=indices?Edit.removeSegments(e,indices):[];
     outputs.set(e.id,[...modified,...remainder]);
     counts.set(e.id,modified.length);
@@ -2197,6 +2598,7 @@ function operate(type) {
   if(tool!=='select'&&!choose('select')) return;
   constraintMode=null;formalTargets=[];selectedConstraint=null;
   if(type==='autoClose') {segmentSelection.clear();formalSelection=[];}
+  if(type==='explode') wholeFocus=null;
   modification={type,phase:null,ids:null,pivot:null,axis:null,locked:true};
   $('rotateValue').value=0;$('scaleValue').value=1;$('scaleY').value=1;$('mirrorHorizontal').checked=true;
   $('moveMode').value='relative';$('moveX').value=0;$('moveY').value=0;
@@ -2304,6 +2706,7 @@ function updateModification() {
       I18n.t(' permet une retouche locale.'):
     type==='autoClose'?I18n.t('Sélectionnez les tracés entiers. Les jonctions possibles sont repérées avant application.'):
     type==='close'?I18n.t('Seuls les tracés dont l’écart est dans la tolérance seront fermés.'):
+    type==='explode'?I18n.t('Appliquez pour dissocier les portions sélectionnées. Glissez un morceau indépendant pour le déplacer.'):
     items.length+I18n.t(' objet(s) sélectionné(s).');
   $('modifyHint').textContent=hint;
   $('hint').textContent=hint;
@@ -2453,8 +2856,15 @@ function canvasCursor(p) {
     if(modificationItems().some(e=>hitsEntity(e,position)||tf&&!modification.applied&&tf.rotation!==0&&
       hitsEntity(transformModification(e,tf),position))) return mode('rotateReady','grab');
   }
+  if(modification?.type==='explode') {
+    const object=hit(world(p))[0];
+    if(object&&!G.strokeParts(object).length) return mode('moveReady','grab');
+  }
   if(modification&&modification.type!=='move') return mode('select','default');
   if(tool==='dimension') return mode('select','default');
+  if(drag?.kind==='textMove') return mode('move','grabbing','text');
+  if(tool==='text') return {behavior:null,native:textPicking?'crosshair':'text',tool:'text',direction:0};
+  if(tool==='select'&&!modification&&!constraintMode&&doc.texts?.length&&textAt(p)) return mode('moveReady','grab','text');
   if(tool==='offset') return mode('target','crosshair');
   if(tool==='point'||tool==='origin') return mode('target','crosshair');
   if(tool!=='select') return mode('draw','crosshair');
@@ -2465,23 +2875,44 @@ function canvasCursor(p) {
   if(dimensionAt(p)||hit(position).length) return mode('moveReady','grab');
   return mode('select','default');
 }
-function updateCanvasCursor() {
-  if(rasterMode) {
-    const css=rasterMode==='rotate'?(rasterRotation?'grabbing':'grab'):'crosshair';
-    if(cursorPositionKey!==css) {canvas.style.cursor=css;cursorPositionKey=css;cursorInputs=[];}
-    return;
+let currentCanvasCursor=null;
+function precisionTool(next) {
+  return rasterMode?'raster':next.tool==='pan'?'pan':modification?.type??constraintMode??tool;
+}
+function cursorActionBadge(next) {
+  const id=precisionTool(next), color=cursorPreferences.colors[id]??cursorPreferences.colors.select;
+  const badge=(path,size)=>'data:image/svg+xml,'+encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+size+' '+size+'"><path d="'+path+
+    '" fill="none" stroke="'+color+'" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  if(next.behavior==='target'&&constraintMode) return badge(constraintSymbols[constraintMode][0],20);
+  if(next.behavior==='target'&&rasterMode==='origin') return SnapIndicators.image('origin',color);
+  if(next.behavior==='select'||next.behavior==='target') {
+    if(modificationIcons[id]) return badge(modificationIcons[id],24);
+    if(toolMiniatures[id]) return toolIconSource(id);
   }
-  const input=[cursorPoint,doc,tool,modification,modification?.phase,modification?.applied,modification?.locked,
-    constraintMode,...selection,drag,drag?.aim,drag?.end,camera.x,camera.y,camera.scale,viewport,selectedDimension,
+  if(next.behavior==='draw'&&toolMiniatures[id]) return toolIconSource(id);
+  const shape={moveReady:'moveMark',move:'move',point:'nodeSquare',box:'boxDash',draw:'crossDot',
+    target:'target',scaleReady:'pushArrow',scaleDrag:'doubleArrow',rotateReady:'turnDot',rotateDrag:'turnDouble'}[next.behavior];
+  return shape?CursorProfiles.image(shape,color,next.direction).src:null;
+}
+function updateCanvasCursor() {
+  const input=[cursorPoint,doc,tool,modification,modification?.phase,modification?.applied,modification?.locked,textPicking,
+    constraintMode,rasterMode,rasterRotation,...selection,drag,drag?.aim,drag?.end,camera.x,camera.y,camera.scale,viewport,selectedDimension,
     ...(modification?['pivotX','pivotY','rotateValue','scaleValue','scaleY'].map(id=>$(id).value):[])];
   if(cursorInputs.length===input.length&&input.every((value,i)=>value===cursorInputs[i])) return;
   cursorInputs=input;
-  if(!cursorPoint) {
+  if(!cursorPoint && !rasterMode) {
+    currentCanvasCursor=null;
     if(cursorPositionKey) {canvas.style.cursor='';cursorPositionKey='';}
     return;
   }
-  const next=canvasCursor(cursorPoint);
-  const css=CursorProfiles.css(next.behavior,next.tool,next.direction,cursorPreferences,next.native);
+  const next=rasterMode?{tool:'raster',direction:0,
+    behavior:rasterMode==='rotate'?(rasterRotation?'rotateDrag':'rotateReady'):'target',
+    native:rasterMode==='rotate'?(rasterRotation?'grabbing':'grab'):'crosshair'}:canvasCursor(cursorPoint);
+  currentCanvasCursor=next;
+  const css=cursorPreferences.mode==='precision'&&tool!=='text'&&next.tool!=='text'?
+    CursorProfiles.precisionCss(precisionTool(next),cursorPreferences):
+    next.behavior&&!rasterMode?CursorProfiles.css(next.behavior,next.tool,next.direction,cursorPreferences,next.native):next.native;
   if(css!==cursorPositionKey) {canvas.style.cursor=css;cursorPositionKey=css;}
 }
 function pickRotationGroup(entity,mod) {
@@ -2901,7 +3332,7 @@ function commitFreeTranslation(changes,action,p) {
     return commitWithoutCoincidence(raw,action.axes)?raw:null;
   }
   constraints.push(...axisConstraints(action.axes??[],constraints));
-  if(!commit(d=>({...d,entities,constraints}),true,true,true,false,true,true)) return false;
+  if(!commit(d=>({...d,entities,constraints}),!action.explodeMove,true,true,false,true,!action.explodeMove)) return false;
   animateRemoval(lost,before);
   warnLost(lost.length,I18n.t('Déplacement appliqué.'));
   return changes;
@@ -2915,7 +3346,7 @@ function applyModification(exact,axes=[]) {
     const parts=G.strokeParts(e);
     if(!parts.length) return [e];
     return parts.map((part,i)=>G.withConstruction(part,G.constructionAt(e,i)));
-  });
+  },true);
   if(type==='close') ok=closeSelected();
   if(type==='autoClose') ok=applyAutomaticClosure();
   if(transformModes.has(type)||type==='mirror') {
@@ -2932,7 +3363,7 @@ function applyModification(exact,axes=[]) {
 }
 function relationLabel(c) {
   if(Formal.isDimension(c)) return I18n.t(Formal.dimensionNames[c.mode])+' · '+dimensionText(c);
-  if(c.type==='cornerAngle') return 'Angle '+num(180-Math.abs(c.value)*180/Math.PI)+'°';
+  if(c.type==='cornerAngle') return I18n.t(Formal.names.cornerAngle)+' · '+num(180-Math.abs(c.value)*180/Math.PI)+'°';
   return I18n.t(Formal.names[c.type])+(c.origin?' · '+c.origin:'');
 }
 function clipboardIncludes(relation,ids) {
@@ -3020,6 +3451,21 @@ function getBounds(entities) {
 }
 function fit() {
   const bounds=getBounds(doc.entities.filter(visible));
+  if(doc.texts?.length) {
+    const entities=new Map(doc.entities.map(entity=>[entity.id,entity]));
+    for(const text of doc.texts) if(doc.layers.some(layer=>layer.name===text.layer&&layer.visible)) {
+      for(const glyph of cadTextLayout(text,entities)) {
+        const m=glyph.metrics;
+        for(const x of [-m.actualBoundingBoxLeft,m.actualBoundingBoxRight])
+          for(const y of [-m.actualBoundingBoxAscent,m.actualBoundingBoxDescent]) {
+            const p=TextGeometry.position(glyph,x,y);
+            for(let axis=0;axis<2;axis++) {
+              bounds[0][axis]=Math.min(bounds[0][axis],p[axis]);bounds[1][axis]=Math.max(bounds[1][axis],p[axis]);
+            }
+          }
+      }
+    }
+  }
   for(const {raster,visible} of doc.layers) {
     if(!raster||!visible) continue;
     const angle=raster.angle*Math.PI/180, cos=Math.abs(Math.cos(angle)), sin=Math.abs(Math.sin(angle));
@@ -3314,7 +3760,8 @@ function endpointSnap(action,sources,moving,delta) {
     const moved=G.add(p,delta), [x,y]=cell(moved);
     for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++) for(const target of action.snapTargets.buckets.get((x+dx)+'/'+(y+dy))??[]) {
       const gap=G.dist(moved,target.point);
-      if(gap<distance&&!(target.kind==='midpoint'&&sources.some(e=>e.id===target.id))&&!moving.some(q=>near(target.point,q))) {
+      const preferredOrigin=target.origin&&best&&!best.target.origin&&Math.abs(gap-distance)<=G.eps;
+      if((gap<distance||preferredOrigin)&&!(target.kind==='midpoint'&&sources.some(e=>e.id===target.id))&&!moving.some(q=>near(target.point,q))) {
         distance=gap;best={source:{id:source.id,index},target,delta:G.sub(target.point,p)};
       }
     }
@@ -3335,9 +3782,10 @@ function moveDelta(action,end,entities) {
   if(action.ignoreSnap||!$('snap').checked||suspended) return delta;
   if(!action.anchorTargets) {
     const moving=new Set(entities.map(e=>e.id));
-    action.anchorTargets=doc.entities.filter(e=>visible(e)&&!moving.has(e.id)).flatMap(entity=>
-      visibleSnapFeatures(entity).map(feature=>({...feature,entity})));
-    action.anchorTargets.push(...layerOrigins(activeLayer).map(({target:q})=>({q,kind:'origin'})));
+    action.anchorTargets=layerOrigins(activeLayer).map(({name,target:q})=>({q,kind:'origin',name}));
+    for(const entity of doc.entities) if(visible(entity)&&!moving.has(entity.id)) {
+      action.anchorTargets.push(...visibleSnapFeatures(entity).map(feature=>({...feature,entity})));
+    }
   }
   const position=G.add(action.anchor.q,delta);
   let distance=8/camera.scale;
@@ -3357,10 +3805,13 @@ function confirmDragSnap(action,p) {
   if(action.anchorSnap) {
     const target=action.anchorSnap, shown=target.entity&&action.changes.get(target.entity.id);
     if(shown&&!G.snapFeatures(shown).some(({q,kind})=>kind===target.kind&&G.dist(q,target.q)<=G.eps*4)) return;
+    const originBound=target.kind==='origin'&&[...action.changes.values()].some(e=>
+      layerOrigins(e.layer).some(o=>o.name===target.name)&&
+      [...Formal.originPoints(e)].some(({p:q})=>G.dist(q,target.q)<=G.eps*4));
     action.snapAt=p;
     const formalSource=action.items.some(e=>Formal.vertices(e).some(q=>G.dist(q,action.anchor.q)<=G.eps));
     const formalTarget=target.entity&&Formal.vertices(target.entity).some(q=>G.dist(q,target.q)<=G.eps);
-    action.snapIndicator={...target,extra:formalSource&&(formalTarget||target.kind==='origin'||target.kind==='midpoint')&&$('autoCoincidence').checked?'coincidence':null};
+    action.snapIndicator={...target,extra:(originBound||formalSource&&(formalTarget||target.kind==='midpoint'))&&$('autoCoincidence').checked?'coincidence':null};
     return;
   }
   const candidate=action.snapCandidate;
@@ -3472,7 +3923,7 @@ function dragGeometry(action,p,preview=false) {
     return [e.id,indices?Edit.transformParts(e,indices,translate):translate(e)];
   }));
   if([...changes.values()].some(e=>!e)) return null;
-  return items.length===1&&!freeTranslation()?projectDraggedCoincidence(changes):changes;
+  return items.length===1&&!freeTranslation()&&!action.explodeMove?projectDraggedCoincidence(changes):changes;
 }
 function freeTranslation() {
   return modification?.transform&&modification.type==='move'&&!modification.protected;
@@ -3501,7 +3952,7 @@ function updateDragPreview(action) {
     if(action.kind==='splineHandle') updateHandleFields(action.handle.setting);
     return;
   }
-  if(action.kind==='rigid'||action.kind==='arcEndpoint'||freeTranslation()) {
+  if(action.kind==='rigid'||action.kind==='arcEndpoint'||freeTranslation()||action.explodeMove) {
     action.changes=desired;
     confirmDragSnap(action,p);
     return;
@@ -3845,6 +4296,31 @@ canvas.addEventListener('pointerdown',e=>{
   angleHeld=mod.shiftKey;tangentHeld=mod.ctrlKey;
   if(drag || ![0,1].includes(e.button)) return;
   const start=mouse(e);
+  const field=document.activeElement;
+  const priorText=field?.form===$('textOptions')&&e.button===0?textAt(start):null;
+  if(field?.matches?.(parameterSelector)) field.blur();
+  if(e.button===0&&tool==='text'&&inlineText) {
+    const caret=cadCaretAt(cadTextValues(),start);
+    if(caret&&(caret.inside||caret.distance*camera.scale<=9)) {
+      e.preventDefault();
+      const anchor=e.shiftKey?(cadInlineEditor.selectionDirection==='backward'?cadInlineEditor.selectionEnd:cadInlineEditor.selectionStart):caret.index;
+      drag={kind:'textCaret',start,id:e.pointerId,anchor};
+      canvas.setPointerCapture(e.pointerId);
+      positionCadCaret(start,anchor);
+      return;
+    }
+    finishInlineText(true);
+  }
+  if(e.button===0&&(tool==='text'||tool==='select'&&!modification&&!constraintMode)&&!textPicking) {
+    const text=textAt(start)??(priorText&&(doc.texts??[]).find(item=>item.id===priorText.id));
+    if(text) {startCadTextDrag(e,start,text);return;}
+    if(tool==='select') textSelection=null;
+  }
+  if(e.button===0&&tool==='text') {
+    drag={kind:'textPlacement',start,id:e.pointerId};
+    canvas.setPointerCapture(e.pointerId);
+    return;
+  }
   cursorPoint=start;
   requestDraw();
   canvas.setPointerCapture(e.pointerId);
@@ -3896,6 +4372,11 @@ canvas.addEventListener('pointerdown',e=>{
     const previewObject=modification.type==='rotate'&&!modification.applied&&tf&&tf.rotation!==0&&modificationItems().find(e=>
       hitsEntity(transformModification(e,tf),position));
     const object=previewObject||hit(position)[0];
+    if(modification.type==='explode'&&object&&!G.strokeParts(object).length&&
+      !mod.ctrlKey&&!mod.shiftKey&&!mod.altKey) {
+      drag={kind:'move',start,items:[object],explodeMove:true,id:e.pointerId};
+      return;
+    }
     if(modification.type==='scale'&&tf&&!mod.ctrlKey) {
       const shown=displayedScaleTransform(tf);
       const handle=scaleHandleAt(shown,start);
@@ -4083,6 +4564,15 @@ canvas.addEventListener('pointermove',e=>{
   cursorPoint=p;
   if(!lastPointer || G.dist(lastPointer,p)>1) snapIndex=0;
   lastPointer=p;
+  if(drag?.kind==='textCaret'&&drag.id===e.pointerId) {
+    positionCadCaret(p,drag.anchor);
+    return;
+  }
+  if(drag?.kind==='textMove'&&drag.id===e.pointerId) {
+    drag.preview=G.dist(drag.start,p)>4?movedCadText(drag,p):null;
+    requestDraw();
+    return;
+  }
   if(drag?.id===e.pointerId) {
     switchSelectionDrag(mod,p);
     if(drag.kind==='rotateGesture'&&!drag.canRotate&&G.dist(drag.start,p)>3)
@@ -4128,6 +4618,9 @@ canvas.addEventListener('pointerup',e=>{
   cursorPoint=p;
   const distance=G.dist(action.start,p);
   refreshPointer(p);
+  if(action.kind==='textCaret') {textCaretClick=distance<=4;return;}
+  if(action.kind==='textMove') {finishCadTextDrag(action,p,distance);return;}
+  if(action.kind==='textPlacement') {if(distance<=4) clickCadText(p);return;}
   if(action.kind==='fillet'&&distance<=4) {applyFillet(p);return;}
   if(action.kind==='scissors') {
     if(action.sweeping||distance>4) applyScissorsCuts(scissorsSweep([...action.points,p]));
@@ -4179,8 +4672,9 @@ canvas.addEventListener('pointerup',e=>{
   }
   const clickedObject=distance<=3&&(action.selectionGesture?.object??
     (['box','move','edit','rigid','splineKnot','radialResize','arcEndpoint'].includes(action.kind)?hit(world(p))[0]:null));
-  const pickedSegment=tool==='select'&&!constraintMode&&!modification&&clickedObject&&
+  const pickedSegment=tool==='select'&&!constraintMode&&(!modification||modification.type==='explode')&&clickedObject&&
     (!mod.ctrlKey||segmentSelection.has(clickedObject.id))&&segmentAt(clickedObject,world(p))!==null;
+  if(action.explodeMove&&distance<=3) pick([action.items[0].id],mod);
   if(action.kind==='box'&&!pickedSegment) {
     if(distance>3) pickBox(action.start,p,mod);
     else pick(action.object?[action.object.id]:[],mod);
@@ -4192,10 +4686,11 @@ canvas.addEventListener('pointerup',e=>{
   if(geometryDrags.has(action.kind)) {
     const changes=dragGeometry(action,p);
     if(changes) {
+      if(action.explodeMove&&changes.size&&!selection.has(action.items[0].id)) pick([action.items[0].id],{});
       if(changes.size&&action.selectionGesture?.group===action&&action.items.length===1&&
         !selection.has(action.items[0].id)) pick([action.items[0].id],{});
       if(changes.size&&['radialResize','arcEndpoint'].includes(action.kind)&&!selection.has(action.entity.id)) pick([action.entity.id],{});
-      const applied=freeTranslation()&&changes.size?commitFreeTranslation(changes,action,p):
+      const applied=(freeTranslation()||action.explodeMove)&&changes.size?commitFreeTranslation(changes,action,p):
         applyChanges(changes,true,action.keepGroup,action.axes,true)?changes:null;
       if(applied?.size) updateTranslationPivot(applied,action);
       if(action.kind==='splineHandle'&&!changes.size) update();
@@ -4251,8 +4746,32 @@ canvas.addEventListener('pointerleave',()=>{
   if(constraintMode!==null) {hover=null;requestDraw();}
 });
 canvas.addEventListener('pointerenter',e=>{cursorPoint=mouse(e);requestDraw();});
+canvas.addEventListener('click',event=>{
+  const caretClick=textCaretClick;
+  textCaretClick=false;
+  if(!inlineText||!caretClick||event.detail<2) return;
+  if(event.detail>=3) cadInlineEditor.select();
+  else {
+    const caret=cadCaretAt(cadTextValues(),mouse(event));
+    if(!caret) return;
+    const range=TextGeometry.wordRange(cadInlineEditor.value,caret.character??caret.index);
+    if(!range) return;
+    cadInlineEditor.setSelectionRange(...range);
+  }
+  refreshInlineCaret();
+});
 canvas.addEventListener('dblclick',e=>{
-  if(rasterMode) return;
+  if(rasterMode||inlineText) return;
+  if((tool==='select'||tool==='text')&&!modification&&!constraintMode) {
+    const text=textAt(mouse(e));
+    if(text) {
+      if(tool==='text'||choose('text')) {
+        const at=mouse(e);
+        loadCadText(text);startInlineText(world(at),cadCaretAt(text,at)?.index);
+      }
+      return;
+    }
+  }
   if(constraintMode!==null||modification) return;
   const dimension=dimensionAt(mouse(e));
   if(dimension && (tool==='select'||tool==='dimension')) {editDimension(dimension);return;}
@@ -4299,7 +4818,7 @@ async function save(as=false) {
   if(saving||exporting) return;
   const snapshot=doc;
   const {constraints,...drawing}=doc;
-  const content=JSON.stringify(constraints?.length?doc:{...drawing,entities:doc.entities.map(({id,...entity})=>entity)},null,2);
+  const content=JSON.stringify(constraints?.length||doc.texts?.some(text=>text.pathMode==='linked')?doc:{...drawing,entities:doc.entities.map(({id,...entity})=>entity)},null,2);
   const suggested=filename+'.vcv';
   saving=true;
   try {
@@ -4341,7 +4860,7 @@ function load(data,name,changed=false) {
   if(rasterMode) setRasterMode();
   removalBatches=[];
   const constraints=[...(data.constraints??[])];
-  const hasStoredIds=constraints.length>0;
+  const hasStoredIds=constraints.length>0||data.texts?.some(text=>text.pathMode==='linked')&&data.entities.every(e=>Number.isSafeInteger(e.id));
   const known=new Set(constraints.map(Formal.signature));
   const entities=data.entities.map(({angles,...source})=>{
     const entity=hasStoredIds?source:identity(source);
@@ -4358,6 +4877,7 @@ function load(data,name,changed=false) {
   doc={...data,entities,constraints};
   filename=name;dirty=changed;activeLayer=doc.layers.find(l=>l.visible)?.name||doc.layers[0].name;
   saveHandle=null;
+  finishInlineText(false);textSelection=null;
   undo=[];redo=[];selection.clear();segmentSelection.clear();points=[];choose('select');update();fit();
 }
 menuAction($('new'),()=>{if(canReplace()){load(Formats.empty(),'dessin');message(I18n.t('Nouveau dessin.'));}});
@@ -4365,7 +4885,8 @@ menuAction($('open'),()=>$('file').click());
 menuAction($('import'),()=>$('vectorFile').click());
 menuAction($('importRaster'),()=>$('rasterFile').click());
 const rasterImportDefaults={rasterBrightness:0,rasterContrast:0,rasterColorTolerance:5,rasterUnprotectedOpacity:100,
-  showOriginalRaster:false};
+  showOriginalRaster:false,scanEnabled:false,scanThreshold:160,scanAdaptive:false,scanShadowRadius:30,
+  scanSpecks:0,scanGap:0,scanThickness:0,scanBackground:true,rasterStraightAxis:'horizontal'};
 const rasterImportDialog=$('rasterImportDialog'), rasterPreview=$('rasterImportPreview');
 const rasterViewport=$('rasterImportViewport');
 function rasterPreviewSize(zoom) {
@@ -4418,24 +4939,33 @@ function readRasterDataURL(blob) {
   });
 }
 function rasterImportSettings() {
-  const colors=rasterImport.colors.map(hex=>hex.slice(1).match(/../g).map(channel=>parseInt(channel,16)));
-  return {brightness:$('rasterBrightness').valueAsNumber,contrast:$('rasterContrast').valueAsNumber,colors,
-    opacity:$('rasterUnprotectedOpacity').valueAsNumber,tolerance:$('rasterColorTolerance').valueAsNumber};
+  const read=id=>{
+    const value=$(id).valueAsNumber;
+    return Number.isFinite(value)?value:rasterImportDefaults[id];
+  };
+  const rgb=hex=>hex.slice(1).match(/../g).map(channel=>parseInt(channel,16));
+  return {brightness:read('rasterBrightness'),contrast:read('rasterContrast'),colors:rasterImport.colors.map(rgb),
+    erase:rasterImport.erase.map(rgb),opacity:read('rasterUnprotectedOpacity'),tolerance:read('rasterColorTolerance'),
+    shape:rasterImport.shape,scan:{enabled:$('scanEnabled').checked,threshold:read('scanThreshold'),
+      adaptive:$('scanAdaptive').checked,shadowRadius:read('scanShadowRadius'),specks:read('scanSpecks'),
+      gap:read('scanGap'),thickness:read('scanThickness'),background:$('scanBackground').checked}};
 }
-const rasterRetouched=settings=>Boolean(settings.brightness||settings.contrast||settings.opacity!==100);
+const rasterRetouched=s=>Boolean(s.brightness||s.contrast||s.opacity!==100||s.erase.length||s.scan.enabled||s.shape.crop||s.shape.quad||s.shape.angle);
 function drawRasterColorList() {
   const state=rasterImport;
-  $('rasterProtectedColors').replaceChildren(...state.colors.map(color=>{
+  $('rasterProtectedColors').replaceChildren(...[...state.colors.map(color=>({color,erase:false})),
+    ...state.erase.map(color=>({color,erase:true}))].map(({color,erase})=>{
     const row=document.createElement('li'), remove=document.createElement('button'), swatch=document.createElement('span');
-    const label=I18n.t('Retirer la protection de {color}.',{color});
+    const label=I18n.t(erase?'Ne plus effacer {color}.':'Retirer la protection de {color}.',{color});
     swatch.className='raster-color-swatch';swatch.style.backgroundColor=color;
     remove.type='button';remove.textContent='×';remove.title=label;remove.setAttribute('aria-label',label);
     remove.onclick=()=>{
       if(state.busy) return;
-      state.colors=state.colors.filter(item=>item!==color);
+      const group=erase?'erase':'colors';
+      state[group]=state[group].filter(item=>item!==color);
       drawRasterColorList();refreshRasterImport();
     };
-    row.append(swatch,document.createTextNode(color.toUpperCase()),remove);
+    row.append(swatch,document.createTextNode((erase?I18n.t('Fond')+' ':'')+color.toUpperCase()),remove);
     return row;
   }));
 }
@@ -4447,29 +4977,113 @@ function resetRasterImportSettings() {
 }
 function setRasterColorPicking(state,picking) {
   state.picking=picking;
-  $('pickRasterColor').textContent=I18n.t(picking?'Terminer le prélèvement':'Prélever dans l’image');
-  $('pickRasterColor').classList.toggle('active',picking);
-  $('pickRasterColor').setAttribute('aria-pressed',String(picking));
-  rasterPreview.classList.toggle('color-picking',picking);
+  $('pickRasterBackground').classList.toggle('active',picking==='erase');
+  $('pickRasterBackground').setAttribute('aria-pressed',String(picking==='erase'));
+  $('pickRasterColor').textContent=I18n.t(picking==='protect'?'Terminer le prélèvement':'Prélever dans l’image');
+  $('pickRasterColor').classList.toggle('active',picking==='protect');
+  $('pickRasterColor').setAttribute('aria-pressed',String(picking==='protect'));
+  rasterPreview.classList.toggle('color-picking',Boolean(picking)||Boolean(state.action));
 }
 function refreshRasterImport() {
   const state=rasterImport;
   if(!state) return;
-  for(const id of Object.keys(rasterImportDefaults)) $(id).disabled=state.busy||id==='rasterColorTolerance'&&!state.colors.length;
-  for(const button of $('rasterProtectedColors').querySelectorAll('button')) button.disabled=state.busy;
-  $('pickRasterColor').disabled=state.busy;
-  $('resetRasterImport').disabled=state.busy;
-  $('applyRasterImport').disabled=state.busy;
+  for(const element of $('rasterImportForm').querySelectorAll('aside input, aside select, aside button'))
+    element.disabled=state.busy;
+  $('showOriginalRaster').disabled=state.busy||Boolean(state.action);
+  for(const id of ['scanThreshold','scanAdaptive','scanSpecks','scanGap','scanThickness','scanBackground'])
+    $(id).disabled=state.busy||!$('scanEnabled').checked;
+  $('scanShadowRadius').disabled=state.busy||!$('scanEnabled').checked||!$('scanAdaptive').checked;
+  $('rasterColorTolerance').disabled=state.busy||!state.colors.length&&!state.erase.length;
+  $('applyRasterImport').disabled=state.busy||Boolean(state.action);
   for(const id of ['rasterBrightness','rasterContrast','rasterColorTolerance','rasterUnprotectedOpacity']) $(id+'Value').value=$(id).value+' %';
   if(state.frame||state.busy) return;
   state.frame=requestAnimationFrame(()=>{
     state.frame=null;
     if(rasterImport!==state||state.busy) return;
-    const {width,height}=rasterPreview, settings=rasterImportSettings();
-    const showRetouch=!$('showOriginalRaster').checked&&!state.picking&&rasterRetouched(settings);
-    const preview=showRetouch?new ImageData(RasterEditing.enhance(state.original.data,settings),width,height):state.original;
-    rasterPreviewContext.putImageData(preview,0,0);
+    const {original}=state, settings=rasterImportSettings();
+    const source=state.picking||state.action==='perspective'||$('showOriginalRaster').checked;
+    const key=source?'original':JSON.stringify(settings);
+    if(state.previewKey!==key) {
+      state.previewKey=key;
+      state.preview=!source&&rasterRetouched(settings)?RasterEditing.processPixels(original.data,original.width,original.height,
+        settings,original.width/state.width):original;
+    }
+    const result=state.preview;
+    if(rasterPreview.width!==result.width) rasterPreview.width=result.width;
+    if(rasterPreview.height!==result.height) rasterPreview.height=result.height;
+    rasterPreviewContext.putImageData(new ImageData(result.data,result.width,result.height),0,0);
+    drawRasterWorkshopOverlay(state);
+    layoutRasterPreview();
   });
+}
+function drawRasterWorkshopOverlay(state) {
+  const {width,height}=rasterPreview, c=rasterPreviewContext;
+  const points=[...state.points,...(state.pointer&&state.points.length?[state.pointer]:[])];
+  c.save();
+  c.strokeStyle='#147bdd';c.fillStyle='#147bdd';c.lineWidth=2;
+  if(points.length) {
+    c.beginPath();c.moveTo(points[0][0]*width,points[0][1]*height);
+    if(state.action==='crop'&&points.length>1) {
+      c.rect(points[0][0]*width,points[0][1]*height,(points[1][0]-points[0][0])*width,(points[1][1]-points[0][1])*height);
+    } else for(const [x,y] of points.slice(1)) c.lineTo(x*width,y*height);
+    c.stroke();
+    for(const [x,y] of state.points) c.fillRect(x*width-3,y*height-3,6,6);
+  }
+  c.restore();
+}
+const rasterWorkshopCommands={rasterCrop:'crop',rasterPerspective:'perspective',rasterStraighten:'straighten'};
+const rasterWorkshopHelp={crop:'Cliquez sur deux coins opposés de la zone à garder.',
+  perspective:'Cliquez sur les quatre coins du rectangle de référence, en tournant depuis le haut gauche.',
+  straighten:'Cliquez sur deux points de la ligne à redresser.'};
+function setRasterWorkshopAction(action=null) {
+  if(!rasterImport) return;
+  const state=rasterImport;
+  state.action=action;state.points=[];state.pointer=null;
+  setRasterColorPicking(state,false);
+  for(const [id,value] of Object.entries(rasterWorkshopCommands)) $(id).classList.toggle('active',action===value);
+  $('rasterImportStatus').value=action?I18n.t(rasterWorkshopHelp[action]):'';
+  if(action) $('showOriginalRaster').checked=false;
+  refreshRasterImport();
+}
+for(const [id,action] of Object.entries(rasterWorkshopCommands)) $(id).onclick=()=>setRasterWorkshopAction(rasterImport.action===action?null:action);
+$('rasterResetShape').onclick=()=>{
+  rasterImport.shape={};setRasterWorkshopAction();
+};
+function rasterWorkshopPoint(event) {
+  const box=rasterPreview.getBoundingClientRect();
+  const point=[(event.clientX-box.left)/box.width,(event.clientY-box.top)/box.height];
+  return point.every(value=>value>=0&&value<=1)?point:null;
+}
+rasterPreview.onpointermove=event=>{
+  if(rasterImport?.action&&rasterImport.points.length) {
+    rasterImport.pointer=rasterWorkshopPoint(event);
+    refreshRasterImport();
+  }
+};
+function completeRasterWorkshopPick(state) {
+  const {action,points}=state;
+  const [a,b]=points;
+  const box=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])];
+  const result=RasterEditing.plan(state.width,state.height,state.shape);
+  const vector=[(b[0]-a[0])*result.width,(b[1]-a[1])*result.height], pixels=Math.hypot(...vector);
+  let message='';
+  if(action==='perspective') {
+    if(RasterEditing.validQuad(points)) {state.shape={quad:points.slice(),angle:state.shape.angle??0};}
+    else message='Les quatre points doivent former un rectangle en perspective sans croisement.';
+  } else if(action==='crop') {
+    if((box[2]-box[0])*result.width>=2&&(box[3]-box[1])*result.height>=2) {
+      const [left,top,right,bottom]=state.shape.crop??[0,0,1,1];
+      const crop=[left+box[0]*(right-left),top+box[1]*(bottom-top),left+box[2]*(right-left),top+box[3]*(bottom-top)];
+      state.shape={...state.shape,crop};
+    } else message='La zone choisie est trop petite.';
+  } else if(pixels<2) message='La zone choisie est trop petite.';
+  else if(action==='straighten') {
+    const angle=Math.atan2(vector[1],vector[0])*180/Math.PI;
+    const offset=($('rasterStraightAxis').value==='vertical'?90:0)-angle;
+    state.shape={...state.shape,angle:(state.shape.angle??0)+((offset+270)%180)-90};
+  }
+  setRasterWorkshopAction();
+  $('rasterImportStatus').value=message?I18n.t(message):'';
 }
 $('rasterFile').onchange=async event=>{
   const file=event.target.files[0];
@@ -4494,11 +5108,11 @@ $('rasterFile').onchange=async event=>{
     rasterPreview.height=Math.max(1,Math.round(height*scale));
     rasterPreviewContext.drawImage(bitmap,0,0,rasterPreview.width,rasterPreview.height);
     const original=rasterPreviewContext.getImageData(0,0,rasterPreview.width,rasterPreview.height);
-    rasterImport={file:payload,url,bitmap,previous,width,height,original,view:{zoom:1,center:[.5,.5]},colors:[],busy:false,frame:null,picking:false,cancelRender:null};
+    rasterImport={file:payload,url,bitmap,previous,width,height,original,view:{zoom:1,center:[.5,.5]},colors:[],erase:[],shape:{},action:null,points:[],pointer:null,busy:false,frame:null,picking:false,cancelRender:null};
     url=null;
     resetRasterImportSettings();
     drawRasterColorList();
-    setRasterColorPicking(rasterImport,false);
+    setRasterWorkshopAction();
     $('rasterImportInfo').value=file.name+' · '+width+' × '+height+' px';
     $('rasterImportStatus').value='';
     rasterImportDialog.showModal();
@@ -4511,23 +5125,31 @@ $('rasterFile').onchange=async event=>{
 $('rasterImportForm').oninput=refreshRasterImport;
 $('resetRasterImport').onclick=()=>{
   resetRasterImportSettings();
-  rasterImport.colors=[];
+  rasterImport.colors=[];rasterImport.erase=[];rasterImport.shape={};
+  setRasterWorkshopAction();
   drawRasterColorList();
   setRasterColorPicking(rasterImport,false);
   $('rasterImportStatus').value='';
   refreshRasterImport();
 };
-$('pickRasterColor').onclick=()=>{
+for(const [id,mode] of [['pickRasterColor','protect'],['pickRasterBackground','erase']]) $(id).onclick=()=>{
   if(!rasterImport) return;
-  setRasterColorPicking(rasterImport,!rasterImport.picking);
-  $('rasterImportStatus').value=rasterImport.picking?I18n.t('Cliquez sur une couleur dans l’image.'):'';
+  const next=rasterImport.picking===mode?false:mode;
+  setRasterWorkshopAction();
+  setRasterColorPicking(rasterImport,next);
+  $('rasterImportStatus').value=next?I18n.t('Cliquez sur une couleur dans l’image.'):'';
   refreshRasterImport();
 };
 rasterPreview.onclick=event=>{
-  if(!rasterImport?.picking) return;
-  const box=rasterPreview.getBoundingClientRect(), {width,height}=rasterPreview;
-  const x=Math.floor((event.clientX-box.left)*width/box.width), y=Math.floor((event.clientY-box.top)*height/box.height);
-  if(x<0||y<0||x>=width||y>=height) return;
+  const state=rasterImport, point=rasterWorkshopPoint(event);
+  if(!state||!point||!state.action&&!state.picking) return;
+  if(state.action) {
+    state.points.push(point);state.pointer=null;
+    if(state.points.length===(state.action==='perspective'?4:2)) completeRasterWorkshopPick(state);
+    else refreshRasterImport();
+    return;
+  }
+  const box=rasterPreview.getBoundingClientRect();
   const sample=document.createElement('canvas');
   sample.width=sample.height=1;
   const context=sample.getContext('2d',{willReadFrequently:true});
@@ -4540,8 +5162,9 @@ rasterPreview.onclick=event=>{
     return;
   }
   const color='#'+[...pixel.subarray(0,3)].map(channel=>channel.toString(16).padStart(2,'0')).join('');
-  if(!rasterImport.colors.includes(color)) {
-    rasterImport.colors.push(color);
+  const selected=state.picking==='erase'?state.erase:state.colors;
+  if(!selected.includes(color)) {
+    selected.push(color);
     drawRasterColorList();
   }
   $('showOriginalRaster').checked=false;
@@ -4549,6 +5172,11 @@ rasterPreview.onclick=event=>{
   refreshRasterImport();
 };
 $('cancelRasterImport').onclick=()=>rasterImportDialog.close();
+rasterImportDialog.addEventListener('cancel',event=>{
+  if(!rasterImport?.action&&!rasterImport?.picking) return;
+  event.preventDefault();
+  setRasterWorkshopAction();
+});
 rasterImportDialog.addEventListener('close',()=>{
   const state=rasterImport;
   if(!state) return;
@@ -4583,26 +5211,30 @@ async function renderRasterImport(state,settings) {
   canvas.width=width;canvas.height=height;
   const context=canvas.getContext('2d',{willReadFrequently:true});
   context.drawImage(state.bitmap,0,0,width,height);
-  RasterEditing.apply(context,width,height,settings);
+  const rendered=RasterEditing.processPixels(context.getImageData(0,0,width,height).data,width,height,settings);
+  canvas.width=rendered.width;canvas.height=rendered.height;
+  context.putImageData(new ImageData(rendered.data,rendered.width,rendered.height),0,0);
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('Le traitement de l’image a échoué.')),'image/png'));
 }
 $('rasterImportForm').onsubmit=async event=>{
   event.preventDefault();
   const state=rasterImport;
-  if(!state||state.busy) return;
+  if(!state||state.busy||state.action) return;
   state.busy=true;
   setRasterColorPicking(state,false);
   refreshRasterImport();
   const settings=rasterImportSettings();
   try {
     const retouched=rasterRetouched(settings);
-    $('rasterImportStatus').value=retouched?I18n.t('Retouche de l’image en pleine résolution…'):I18n.t('Importation de l’image…');
-    const payload=retouched?await renderRasterImport(state,settings):state.file;
+    $('rasterImportStatus').value=retouched?I18n.t('Retouche de l’image en pleine résolution…'):I18n.t('Conversion de l’image en PNG…');
+    const payload=await renderRasterImport(state,settings);
     if(rasterImport!==state) return;
+    if(payload?.type!=='image/png') throw Error('La conversion PNG a échoué.');
     const source=await readRasterDataURL(payload);
     if(rasterImport!==state||!rasterImportDialog.open) return;
     if(doc!==state.previous||saving) throw Error('Le dessin a changé pendant la lecture. Relancez l’ouverture.');
-    addRasterImport(source,state.width,state.height);
+    const {width,height}=RasterEditing.plan(state.width,state.height,state.shape);
+    addRasterImport(source,width,height);
     rasterImportDialog.close();
   } catch(error) {
     if(rasterImport===state) $('rasterImportStatus').value=I18n.t(error.message);
@@ -4626,7 +5258,8 @@ function addRasterImport(source,width,height) {
   const fields=captureCoordinateFields();
   activeLayer=name;selectedOrigin=null;selectedDimension=null;selectedConstraint=null;
   formalSelection=[];formalTargets=[];dimensionRefs=[];dimensionRound=null;
-  commit(d=>({...d,nextRasterNumber:index+1,layers:[...d.layers,{name,color:'#000000',visible:true,raster}]}),false);
+  const layers=[...doc.layers,{name,color:'#000000',visible:true,raster}];
+  commit(d=>({...d,nextRasterNumber:index+1,layers}),false);
   restoreCoordinateFields(fields);
   if(!previous.entities.length&&previous.layers.every(layer=>!layer.raster)) fit();
   message(I18n.t('Image ajoutée au calque « {name} ».',{name}));
@@ -5758,10 +6391,33 @@ const exportFormats={
   dxf2000:{extension:'.dxf',label:'DXF 2000',mime:'application/dxf',write:(drawing,options)=>Formats.dxfBytes(Formats.write(drawing,false,options))},
   dxfR14:{extension:'.dxf',label:'DXF R14 (mm)',mime:'application/dxf',write:(drawing,options)=>Formats.dxfBytes(Formats.write(drawing,'r14',options))},
   dxfR12:{extension:'.dxf',label:'DXF R12 (mm)',mime:'application/dxf',write:(drawing,options)=>Formats.dxfBytes(Formats.write(drawing,'r12',options))},
-  svg:{extension:'.svg',label:'SVG',mime:'image/svg+xml',write:Formats.writeSVG}
+  svg:{extension:'.svg',label:'SVG',mime:'image/svg+xml',write:Formats.writeSVG},
+  png:{extension:'.png',label:'PNG',mime:'image/png',write:exportRasterPNG}
 };
 const exportDialog=$('exportDialog'), exportForm=$('exportForm');
+async function exportRasterPNG(image) {
+  const source=Formats.rasterSource(image);
+  const blob=await (await fetch(source)).blob();
+  if(blob.type==='image/png') return blob;
+  // Projects saved before PNG normalization can still contain another image format.
+  const bitmap=await createImageBitmap(blob);
+  const canvas=document.createElement('canvas');
+  canvas.width=bitmap.width;canvas.height=bitmap.height;
+  try {canvas.getContext('2d').drawImage(bitmap,0,0);}
+  finally {bitmap.close();}
+  return new Promise((resolve,reject)=>canvas.toBlob(result=>result?resolve(result):
+    reject(Error('La conversion PNG a échoué.')),'image/png'));
+}
 function exportDrawing() {
+  const raster=$('exportFormat').value==='png';
+  $('exportScope').hidden=raster;
+  $('exportConstructionRow').hidden=raster;
+  $('exportTextRow').hidden=raster;
+  $('exportRasterRow').hidden=!raster;
+  if(raster) {
+    const image=doc.layers.find(layer=>layer.name===$('exportRasterLayer').value)?.raster;
+    return {drawing:image,notice:image?'':I18n.t('Le dessin ne contient aucun calque matriciel.')};
+  }
   const mode=exportForm.elements.namedItem('exportScope').value;
   const layers=$('exportLayers');
   layers.hidden=mode!=='layers';
@@ -5769,9 +6425,13 @@ function exportDrawing() {
   const scope=mode==='layers'?{layerNames:new Set([...layers.querySelectorAll('input:checked')].map(input=>input.value))}:
     mode==='selection'?{selectedIds:new Set(selected().map(e=>e.id)),selectedSegments:segmentSelection}:undefined;
   const drawing=Formats.exportSubset(doc,scope);
+  const texts=$('exportText').checked?(doc.texts??[]).filter(text=>
+    mode==='selection'?text.id===(textDraft?.id??textSelection):!scope?.layerNames||scope.layerNames.has(text.layer)):[];
+  for(const {layer} of texts) if(!drawing.layers.some(item=>item.name===layer))
+    drawing.layers=[...drawing.layers,doc.layers.find(item=>item.name===layer)];
   const notice=scope?.layerNames?.size===0?I18n.t('Cochez au moins un calque.'):
-    !Formats.hasExportGeometry(drawing,includeConstruction)?I18n.t('Aucun tracé à exporter avec ces options.'):'';
-  return {drawing,includeConstruction,notice};
+    !texts.length&&!Formats.hasExportGeometry(drawing,includeConstruction)?I18n.t('Aucun tracé à exporter avec ces options.'):'';
+  return {drawing,includeConstruction,texts,notice};
 }
 function updateExportDialog() {
   const {notice}=exportDrawing();
@@ -5785,8 +6445,15 @@ menuAction($('quickExport'),()=>{
   $('exportName').value=filename;
   $('exportFormat').replaceChildren(...Object.entries(exportFormats).map(([id,format])=>
     new Option(format.extension+' — '+format.label,id)));
-  exportForm.elements.namedItem('exportScope').value=selected().length?'selection':'all';
-  $('exportScope').querySelector('[value="selection"]').disabled=!selected().length;
+  $('exportRasterLayer').replaceChildren(...doc.layers.filter(layer=>layer.raster).map(layer=>new Option(layer.name,layer.name)));
+  if(doc.layers.some(layer=>layer.name===activeLayer&&layer.raster)) {
+    $('exportRasterLayer').value=activeLayer;
+    $('exportFormat').value='png';
+  }
+  const hasSelection=Boolean(selected().length||(doc.texts??[]).some(text=>text.id===(textDraft?.id??textSelection)));
+  exportForm.elements.namedItem('exportScope').value=hasSelection?'selection':'all';
+  $('exportScope').querySelector('[value="selection"]').disabled=!hasSelection;
+  $('exportText').checked=true;
   $('exportConstruction').checked=false;
   $('exportLayers').replaceChildren(...doc.layers.filter(layer=>!layer.raster).map(layer=>{
     const label=document.createElement('label'), check=document.createElement('input');
@@ -5803,10 +6470,13 @@ exportDialog.addEventListener('cancel',event=>{if(exporting) event.preventDefaul
 exportForm.onsubmit=async event=>{
   event.preventDefault();
   if(exporting) return;
-  const {drawing,includeConstruction,notice}=exportDrawing();
+  const {drawing,includeConstruction,texts,notice}=exportDrawing();
   if(notice) return;
   const format=exportFormats[$('exportFormat').value], extension=format?.extension;
-  const base=$('exportName').value.trim().replace(/\.(dxf|svg)$/i,'').trim();
+  const inputName=$('exportName').value.trim();
+  const suffix=Object.values(exportFormats).map(item=>item.extension)
+    .find(ending=>inputName.toLowerCase().endsWith(ending));
+  const base=suffix?inputName.slice(0,-suffix.length).trim():inputName;
   if(!format||!base||/[<>:"/\\|?*\x00-\x1f]/.test(base)||base==='.'||base==='..') {
     $('exportNotice').textContent=I18n.t('Saisissez un nom de fichier valide.');
     $('exportNotice').hidden=false;
@@ -5825,7 +6495,16 @@ exportForm.onsubmit=async event=>{
         if(!['SecurityError','NotSupportedError'].includes(error.name)) throw error;
       }
     }
-    const content=format.write(drawing,{includeConstruction});
+    if(texts?.length) {
+      await Promise.all([...new Set(texts.map(text=>text.family))].map(prepareCadFont));
+      const entities=new Map(doc.entities.map(entity=>[entity.id,entity]));
+      const glyphCanvas=document.createElement('canvas');
+      await document.fonts?.ready;
+      drawing.entities=[...drawing.entities,...texts.flatMap(text=>
+        TextGeometry.vectorize(text,entities,cadTextMeasure,glyphCanvas,Formats.millimeters[doc.units]))];
+      if(!Formats.hasExportGeometry(drawing,includeConstruction)) throw Error('Aucun tracé à exporter avec ces options.');
+    }
+    const content=await format.write(drawing,{includeConstruction});
     if(handle) {
       if(!handle.name.toLowerCase().endsWith(extension)) throw Error(I18n.t('Utilisez l’extension ')+extension+'.');
       const output=await handle.createWritable();
@@ -5872,6 +6551,8 @@ function showSnapPreferences() {
   }
 }
 function showCursorPreferences() {
+  $('cursorMode').value=cursorPreferences.mode;
+  $('classicCursorOptions').hidden=cursorPreferences.mode!=='classic';
   $('cursorShapes').replaceChildren();
   $('cursorColors').replaceChildren();
   for(const [key,[title,...choices]] of Object.entries(CursorProfiles.profiles)) {
@@ -5892,7 +6573,7 @@ function showCursorPreferences() {
     row.className='cursor-preference color-preference';
     preview.alt='';preview.width=32;preview.height=32;
     color.type='color';color.value=cursorPreferences.colors[key];
-    function show() {preview.src=CursorProfiles.image(cursorPreferences.shapes.select,color.value).src;}
+    function show() {preview.src=CursorProfiles.image(cursorPreferences.mode==='precision'&&key!=='text'?'precision':cursorPreferences.shapes.select,color.value).src;}
     color.oninput=()=>{cursorPreferences.colors[key]=color.value;saveCursorPreferences();show();};
     show();row.append(preview,document.createTextNode(I18n.t(title)),color);$('cursorColors').append(row);
   }
@@ -5975,6 +6656,11 @@ $('resetCursorShapes').onclick=()=>{
 $('resetCursorColors').onclick=()=>{
   cursorPreferences.colors=CursorProfiles.normalize().colors;saveCursorPreferences();showCursorPreferences();
 };
+$('cursorMode').onchange=()=>{
+  cursorPreferences.mode=$('cursorMode').value;
+  saveCursorPreferences();
+  showCursorPreferences();
+};
 $('snapIndicatorCorner').onchange=()=>{
   snapPreferences.corner=$('snapIndicatorCorner').value;
   saveSnapPreferences();
@@ -6008,7 +6694,9 @@ function toolIconSource(id,method=toolMethod(id)) {
   const cursorColor=cursorPreferences.colors[id]??cursorPreferences.colors.select;
   const color='#'+cursorColor.slice(1).match(/../g).map(channel=>
     Math.round(Number.parseInt(channel,16)/2).toString(16).padStart(2,'0')).join('');
-  if(id==='select') return CursorProfiles.image(cursorPreferences.shapes.select,color).src;
+  if(id==='select') return CursorProfiles.image(cursorPreferences.mode==='precision'?'precision':cursorPreferences.shapes.select,color).src;
+  if(id==='text') return 'data:image/svg+xml,'+encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="12" y="19" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="'+color+'">A</text></svg>');
   const key=id==='arc'&&method==='three'?'arcThree':id==='rect'&&method==='center'?'rectCenter':id;
   const {outline,guide,points}=toolMiniatures[key];
   const marks=points.map(([x,y])=>'<rect x="'+(x-1.4)+'" y="'+(y-1.4)+'" width="2.8" height="2.8" fill="'+color+'" stroke="none"/>').join('');
@@ -6186,6 +6874,113 @@ toolVisibilityMenu('drawingMenu','velocivector-hidden-drawing-tools',[...$('tool
   command.append(toolbar.querySelector('img').cloneNode(true));
   return {id,label:definitions[id][1],toolbar,command,action:()=>choose(toolForMethod(id))};
 }));
+const helpSections={
+  draw:'select poly tangentPoly rect rectCenter circle arc arcThree polygon ellipse slot bezier point origin offset text dimension transmissions'.split(' '),
+  constraints:'constraintWorkflow horizontal vertical coincident midpoint parallel collinear perpendicular equal tangent symmetry locked'.split(' '),
+  modify:'transform move scale rotate mirror reverse explode close autoClose fillet scissors'.split(' '),
+  workspace:'layers construction precision rasterLayer calibrateRaster rotateRaster alignRasterOrigin'.split(' '),
+  vector:'vectorPreview recognition autoConstraints junction overlaps vectorApply'.split(' '),
+  image:'imagePreview brightness colors scan crop perspective straighten'.split(' '),
+  files:'native exportVector exportRaster preferences'.split(' '),
+};
+const helpGlyphs={
+  constraintWorkflow:'◇',layers:'▤',construction:'┄',rasterLayer:'▧',vectorPreview:'▱',
+  recognition:'⌁',autoConstraints:'⊥',junction:'⋈',overlaps:'▣',vectorApply:'↳',
+  imagePreview:'▧',brightness:'☼',colors:'◐',scan:'▦',crop:'⌗',perspective:'⏢',
+  straighten:'∠',native:'▤',exportVector:'↗',exportRaster:'↗',preferences:'⚙',transmissions:'⚙'
+};
+let activeHelpSection='draw';
+const helpShortcutCommands={
+  poly:['polyAlternate','tool:poly'],tangentPoly:['tool:tangentPoly','tool:poly'],
+  rectCenter:['tool:rect'],arcThree:['tool:arc'],
+  move:['transform:move'],scale:['transform:scale'],rotate:['transform:rotate'],
+  transform:['operation:transform','transform:auto'],
+  construction:['construction'],layers:['selectLayer'],constraintWorkflow:['remove'],
+  precision:['cycleSnap','suspendSnap'],native:['open','save','saveAs']
+};
+function helpShortcuts(id) {
+  const commands=helpShortcutCommands[id]??(
+    Object.hasOwn(definitions,id)?['tool:'+id]:
+    Object.hasOwn(shortcuts,'constraint:'+id)?['constraint:'+id]:
+    Object.hasOwn(shortcuts,'operation:'+id)?['operation:'+id]:[]);
+  const row=document.createElement('p');
+  row.className='help-shortcuts';
+  row.append(I18n.t('Raccourcis clavier'),' · ');
+  if(!commands.length) row.append(I18n.t('Aucun raccourci dédié'));
+  for(const command of commands) {
+    if(command!==commands[0]) row.append(' · ');
+    if(Object.hasOwn(helpShortcutCommands,id)&&id!=='construction') {
+      const label=Object.values(shortcutCatalog).find(group=>Object.hasOwn(group,command))?.[command][0];
+      if(label) row.append(I18n.t(label),' ');
+    }
+    const key=document.createElement(shortcuts[command]?'kbd':'span');
+    key.textContent=shortcutText(shortcuts[command]);
+    row.append(key);
+  }
+  return row;
+}
+function helpIcon(id) {
+  if(Object.hasOwn(constraintSymbols,id)) return constraintIcon(id);
+  const control=id==='construction'?$('constructionToggle'):$(id)??
+    modificationEntries.find(entry=>entry.id===id)?.toolbar??
+    $('transformModes').querySelector('[data-transform-mode="'+id+'"]');
+  const existing=control?.querySelector('svg');
+  if(existing) return existing.cloneNode(true);
+  if(id==='precision') return $('precisionIcons').querySelector('img').cloneNode(true);
+  if(Object.hasOwn(definitions,id)||id==='arcThree'||id==='rectCenter') {
+    const image=document.createElement('img');
+    image.alt='';
+    const toolId=id==='arcThree'?'arc':id==='rectCenter'?'rect':id;
+    const method={arcThree:'three',arc:'center',rectCenter:'center',rect:'corners',poly:'classic',tangentPoly:'tangent'}[id];
+    image.src=toolIconSource(toolId,method);
+    return image;
+  }
+  const glyph=document.createElement('span');
+  glyph.textContent=helpGlyphs[id];
+  return glyph;
+}
+function showHelpSection(section) {
+  activeHelpSection=section;
+  const keys={
+    arcToggle:shortcutText(shortcuts['tool:arc']),
+    finish:shortcutText(shortcuts.finish),
+    exit:shortcutText(shortcuts.exit),
+    remove:shortcutText(shortcuts.remove),
+    undo:shortcutText(shortcuts.undo),
+    construction:shortcutText(shortcuts.construction),
+    localEdit:I18n.t(modifierLabels[gestureKeys.ctrlKey]),
+    alignment:I18n.t(modifierLabels[gestureKeys.shiftKey])
+  };
+  for(const button of $('helpSections').children)
+    button.setAttribute('aria-pressed',String(button.dataset.helpSection===section));
+  $('helpSectionTitle').textContent=I18n.t('help.section.'+section);
+  $('helpCards').replaceChildren(...helpSections[section].map(id=>{
+    const card=document.createElement('li'), icon=document.createElement('span');
+    const text=document.createElement('div'), title=document.createElement('h4'), effect=document.createElement('p');
+    icon.className='help-icon';
+    icon.setAttribute('aria-hidden','true');
+    icon.append(helpIcon(id));
+    title.textContent=I18n.t('help.'+id+'.title');
+    effect.textContent=I18n.t('help.'+id+'.effect',keys);
+    text.append(title,helpShortcuts(id),effect);
+    card.append(icon,text);
+    return card;
+  }));
+  $('helpContent').scrollTop=0;
+}
+for(const section of Object.keys(helpSections)) {
+  const tab=document.createElement('button');
+  tab.type='button';
+  tab.dataset.helpSection=section;
+  I18n.text(tab,'help.section.'+section);
+  tab.onclick=()=>showHelpSection(section);
+  $('helpSections').append(tab);
+}
+menuAction($('openHelp'),()=>{
+  showHelpSection(activeHelpSection);
+  $('helpDialog').showModal();
+});
+menuAction($('openAbout'),()=>$('aboutDialog').showModal());
 for(const b of $('transformModes').querySelectorAll('[data-transform-mode]')) {
   const mode=b.dataset.transformMode;
   setModificationIcon(b,mode,mode==='auto'?'Transformation automatique':'Verrouiller · '+modificationNames[mode]);
@@ -6425,14 +7220,36 @@ $('resetKnot').onclick=()=>{
   if(knot) applyChanges(knotChanges(knot,null));
 };
 let parameterEdit=null;
-const parameterSelector='#options input[type="number"], #options input[type="text"], #options input:not([type]), #options input[type="range"], #options select';
-document.addEventListener('focusin',e=>{
-  parameterEdit=e.target.matches?.(parameterSelector)?{element:e.target,value:e.target.value}:null;
+const parameterSelector='input[data-numeric-expression], input[type="text"], input:not([type]), input[type="range"], textarea:not(#cadInlineEditor), select';
+document.addEventListener('focusin',event=>{
+  const field=event.target;
+  parameterEdit=field.matches?.(parameterSelector)?{field,value:field.value}:null;
+});
+document.addEventListener('focusout',event=>{
+  const field=event.target, edit=parameterEdit;
+  if(edit?.field!==field) return;
+  parameterEdit=null;
+  if(field.value===edit.value||event.relatedTarget?.closest('[data-cancel-edit]')) return;
+  if(field.hasAttribute('data-numeric-expression')&&field.value.trim()&&!Number.isFinite(field.valueAsNumber)) {
+    field.value=edit.value;
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+    message(I18n.t('Saisissez une valeur valide avant d’appliquer la modification.'));
+    return;
+  }
+  const form=field.form;
+  if(!form||form.closest('dialog:not([open])')||event.relatedTarget?.form===form&&event.relatedTarget.type==='submit') return;
+  if(form.id==='textOptions'&&textDraft?.p&&$('cadTextContent').value.trim()) {
+    const text=cadTextValues();
+    if(cadTextValid(text)&&(text.pathMode!=='linked'||text.pathId)&&
+      (text.pathMode!=='arc'||text.radius>0)) applyCadText();
+  } else if(['rasterOptions','selectedOriginForm','renameLayerForm','addLayer'].includes(form.id)&&form.checkValidity()) {
+    form.requestSubmit();
+  }
 });
 window.addEventListener('keydown',e=>{
-  if(rasterRotation&&e.key==='Shift') updateRasterRotation(e);
+  if(rasterRotation&&e.key===gestureKeys.shiftKey) updateRasterRotation(e);
   if(Object.hasOwn(modifierLabels,e.key)) updateGestureModifiers(e);
-  if($('preferencesDialog').open||$('originDialog').open||$('importDialog').open||$('transferLayerDialog').open||$('removeLayerDialog').open||$('renameLayerDialog').open||$('calibrateRasterDialog').open||rasterImportDialog.open||exportDialog.open) return;
+  if($('pluginDialog').open||$('helpDialog').open||$('aboutDialog').open||$('preferencesDialog').open||$('originDialog').open||$('importDialog').open||$('transferLayerDialog').open||$('removeLayerDialog').open||$('renameLayerDialog').open||$('calibrateRasterDialog').open||rasterImportDialog.open||exportDialog.open) return;
   const chord=keyboardChord(e);
   const command=chord&&Object.keys(shortcuts).find(id=>shortcuts[id]===chord);
   if(command==='save'||command==='saveAs') {e.preventDefault();save(command==='saveAs');return;}
@@ -6468,10 +7285,11 @@ window.addEventListener('keydown',e=>{
   if(command==='exit') {
     if(e.target.matches?.(parameterSelector)) {
       e.preventDefault();
-      if(parameterEdit?.element===e.target&&e.target.value!==parameterEdit.value) {
+      if(parameterEdit?.field===e.target&&e.target.value!==parameterEdit.value) {
         e.target.value=parameterEdit.value;
         e.target.dispatchEvent(new Event(e.target.tagName==='SELECT'?'change':'input',{bubbles:true}));
       }
+      parameterEdit=null;
       e.target.blur();
       return;
     }
@@ -6488,6 +7306,7 @@ window.addEventListener('keydown',e=>{
     if(document.activeElement instanceof HTMLElement) document.activeElement.blur();
     return;
   }
+  if(command==='finish'&&tool==='text') {e.preventDefault();if(!e.repeat) applyCadText();return;}
   if(command==='finish'&&tool==='offset') {e.preventDefault();if(!e.repeat) applyOffset();return;}
   if(command==='finish' && polylineTool()) {e.preventDefault();finishPolyline();return;}
   if(command==='finish' && tool==='bezier') {e.preventDefault();finishBezier();return;}
@@ -6513,7 +7332,7 @@ window.addEventListener('keydown',e=>{
     if(!e.repeat) askRemoveLayer(e.target.closest('.layer').dataset.layer);
     return;
   }
-  if(command==='remove'&&!e.repeat) {e.preventDefault();operate('remove');return;}
+  if(command==='remove'&&!e.repeat) {e.preventDefault();if(tool==='text'||tool==='select'&&textSelection&&!modification&&!constraintMode) deleteCadText();else operate('remove');return;}
   if(command==='polyAlternate'&&!e.repeat) {e.preventDefault();if(tool!=='poly') choose('poly');return;}
   if(command?.startsWith('constraint:')||command?.startsWith('operation:')||command?.startsWith('transform:')) {
     e.preventDefault();
@@ -6552,7 +7371,7 @@ let suspendKey=null;
 function resumeSnap() {suspendKey=null;suspended=false;refreshSnapPreview();}
 window.addEventListener('keyup',e=>{
   if(e.key==='Tab'&&metricSnapStep) {metricSnapStep=0;updateGestureModifiers(e);}
-  if(rasterRotation&&e.key==='Shift') updateRasterRotation(e);
+  if(rasterRotation&&e.key===gestureKeys.shiftKey) updateRasterRotation(e);
   if(Object.hasOwn(modifierLabels,e.key)) updateGestureModifiers(e);
   if(suspended&&e.key===suspendKey) resumeSnap();
 });
@@ -6564,11 +7383,16 @@ window.addEventListener('blur',()=>{
 });
 window.addEventListener('beforeunload',e=>{if(dirty||tool==='bezier'&&points.length){e.preventDefault();e.returnValue='';}});
 function refreshInterfaceLanguage() {
+  if(typeof VelocivectorPlugins!=='undefined') VelocivectorPlugins.refresh();
+  if($('helpDialog').open) showHelpSection(activeHelpSection);
   renderedLayers=null;
   $('toolName').textContent=I18n.t(definitions[tool][1]);
   $('help').textContent=toolHint(tool);
   $('frameCoordinates').title=absoluteFrameReadout?I18n.t('Afficher le déplacement relatif'):I18n.t('Afficher les coordonnées absolues');
   $('shortcutFeedback').textContent='';
+  message(I18n.t('Prêt'));
+  showCadFonts(cadFontChoices);
+  updateCadFontRefresh(Boolean(cadLocalFonts.size||readSavedCadFonts().length));
   for(const [i,unit] of Formats.units.entries()) $('units').options[i].text=I18n.t(unit);
   for(const refresh of [...constraintVisibility,...toolVisibilityRefresh]) refresh();
   updateShortcutTitles();
@@ -6577,16 +7401,23 @@ function refreshInterfaceLanguage() {
   renderShortcuts();
   update();
 }
-$('interfaceLanguage').value=I18n.preference;
+const languageSelect=$('interfaceLanguage');
+for(const {code,name,dir} of I18n.options) {
+  const option=new Option(name,code);
+  option.lang=code;
+  option.dir=dir;
+  languageSelect.add(option);
+}
+languageSelect.value=I18n.preference;
 $('interfaceLanguage').onchange=event=>{
-  I18n.setPreference(event.target.value);
-  refreshInterfaceLanguage();
+  I18n.setPreference(event.target.value).then(refreshInterfaceLanguage);
 };
 window.addEventListener('languagechange',()=>{
   if(I18n.preference!=='auto') return;
-  I18n.refresh();
-  refreshInterfaceLanguage();
+  I18n.refresh().then(refreshInterfaceLanguage);
 });
+const startupLanguage=I18n.language;
+I18n.ready.then(()=>{if(I18n.language!==startupLanguage) refreshInterfaceLanguage();});
 applyTheme();choose(tool);updateShortcutTitles();
 
 

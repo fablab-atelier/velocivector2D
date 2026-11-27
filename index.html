@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Velocivector 2D CAD</title><link rel="stylesheet" href="style.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Velocivector 2D CAD</title><link rel="icon" href="velocivector.ico" sizes="any"><link rel="icon" href="velocivector-logo.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css"></head>
 <body>
 <header>
   <div class="menu-bar">
@@ -16,7 +16,7 @@
         <button id="saveAs">Enregistrer sous… <kbd>Ctrl+Maj+S</kbd></button>
         <hr>
         <button id="quickExport" type="button">Export rapide…</button>
-        <hr><button id="preferences">Préférences…</button>
+        <hr><button id="preferences"><span>Préférences…</span><svg class="command-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 3-.6 2.4-2 .9-2.2-1.2-2.1 3.6 1.8 1.7v2.2l-1.8 1.7 2.1 3.6 2.2-1.2 2 .9.6 2.4h4l.6-2.4 2-.9 2.2 1.2 2.1-3.6-1.8-1.7v-2.2l1.8-1.7-2.1-3.6-2.2 1.2-2-.9L14 3z"/><circle cx="12" cy="11.5" r="3"/></svg></button>
       </div>
     </details>
     <details class="app-menu">
@@ -31,8 +31,19 @@
       <summary>Modification</summary>
       <div class="menu-popup" id="modificationMenu"></div>
     </details>
+    <details class="app-menu">
+      <summary id="pluginsLabel">Extensions</summary>
+      <div class="menu-popup" id="pluginsMenu"></div>
+    </details>
+    <details class="app-menu">
+      <summary>Aide</summary>
+      <div class="menu-popup" id="helpMenu">
+        <button id="openHelp" type="button">Guide des outils</button>
+        <button id="openAbout" type="button">À propos</button>
+      </div>
+    </details>
   </div>
-  <strong>Veloci<span>vector</span> <small>2D CAD</small></strong>
+  <strong class="app-brand"><img src="velocivector-logo.svg" width="26" height="26" alt=""> <b>Veloci<span>vector</span> <small>2D CAD</small></b></strong>
   <input hidden type="file" id="file" accept=".vcv,.vvec">
   <input hidden type="file" id="vectorFile" accept=".dxf,.svg,image/svg+xml">
   <input hidden type="file" id="rasterFile" accept=".png,.jpg,.jpeg,.jfif,.avif,.webp,.gif,image/png,image/jpeg,image/avif,image/webp,image/gif">
@@ -76,13 +87,48 @@
   <div>Tracés ouverts <output id="openContourCount">0</output></div>
   <div>Tracés fermés <output id="closedContourCount">0</output></div>
 </div>
-<div id="snapIndicator" aria-hidden="true" hidden></div></section>
+<textarea id="cadInlineEditor" aria-label="Modifier le texte dans le dessin" spellcheck="false" maxlength="2000" hidden></textarea><div id="snapIndicator" aria-hidden="true" hidden></div></section>
 <aside id="options"><div id="optionsScroll"><h2 id="toolName"></h2><p id="help"></p><form id="selectedOriginForm" hidden>
 <h2 id="selectedOriginName"></h2>
 <label>X (POA) <input id="selectedOriginX" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
 <label>Y (POA) <input id="selectedOriginY" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
 <button type="submit">Appliquer</button>
-</form><form id="point"><label><span id="coordinateX">X</span> <input id="x" inputmode="decimal" placeholder="0"></label><label><span id="coordinateY">Y</span> <input id="y" inputmode="decimal" placeholder="0"></label><button>Poser le point</button></form><label id="sidesRow">Côtés <input id="sides" type="number" min="3" max="360" value="6"></label><hr><h2>Calques</h2><div id="layers"></div>
+</form><form id="point"><label><span id="coordinateX">X</span> <input id="x" inputmode="decimal" placeholder="0"></label><label><span id="coordinateY">Y</span> <input id="y" inputmode="decimal" placeholder="0"></label><button>Poser le point</button></form><label id="sidesRow">Côtés <input id="sides" type="number" min="3" max="360" value="6"></label><form id="textOptions" hidden>
+  <label>Contenu du texte <textarea id="cadTextContent" rows="3" maxlength="2000"></textarea></label>
+  <div class="cad-font-picker">
+    <details id="cadFontMenu">
+      <summary><span>Police</span> <strong id="cadFontCurrent"></strong></summary>
+      <div id="cadFontList" role="group" aria-label="Polices de caractères"></div>
+    </details>
+    <button id="listCadFonts" type="button" title="Lister les polices locales" aria-label="Lister les polices locales">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10a8 8 0 1 0-1.5 7M20 4v6h-6"/></svg>
+    </button>
+  </div>
+  <label id="cadCustomFontRow" hidden>Nom de la police <input id="cadTextFont" type="text" value="Arial" maxlength="128"></label>
+  <output id="cadFontStatus" role="status"></output>
+  <label>Alignement <select id="cadTextAlign"><option value="left">Gauche</option><option value="center">Centré</option><option value="right">Droite</option></select></label>
+  <label>Hauteur de police (mm) <input id="cadTextHeight" type="number" min=".01" step="any" value="5"></label>
+  <label>Espacement des lettres (mm) <input id="cadTextLetter" type="number" step="any" value="0"></label>
+  <label>Espacement des lignes (mm) <input id="cadTextLine" type="number" min="0" step="any" value="2"></label>
+  <label>Largeur des lettres (%) <input id="cadTextWidth" type="number" min="1" max="1000" step="any" value="100"></label>
+  <label>Rotation du texte (°) <input id="cadTextAngle" type="number" step="any" value="0"></label>
+  <fieldset>
+    <legend>Texte sur une courbe</legend>
+    <label>Support du texte <select id="cadTextPath"><option value="straight">Sans courbe</option><option value="linked">Courbe du dessin</option><option value="arc">Courbe circulaire</option></select></label>
+    <div id="textPathOptions" hidden>
+      <button id="pickCadTextPath" type="button">Choisir la courbe dans le dessin</button>
+      <label>Rayon de courbe (mm) <input id="cadTextRadius" type="number" min="0" step="any" value="0" title="0 garde le rayon de la courbe sélectionnée."></label>
+      <label>Décalage le long du tracé (mm) <input id="cadTextAlong" type="number" step="any" value="0"></label>
+      <label>Distance à la courbe (mm) <input id="cadTextOffset" type="number" step="any" value="0"></label>
+      <label>Orientation sur la courbe <select id="cadTextOrientation"><option value="tangent">Tangente au tracé</option><option value="upright">Lettres verticales</option></select></label>
+      <label>Côté de la courbe <select id="cadTextSide"><option value="outside">Extérieur</option><option value="inside">Intérieur</option></select></label>
+      <label><input id="cadTextReverse" type="checkbox"> Inverser le sens de lecture</label>
+    </div>
+  </fieldset>
+  <div class="tool-actions"><button type="submit">Appliquer</button><button id="newCadText" type="button">Nouveau texte</button></div>
+  <div class="tool-actions"><button id="moveCadText" type="button">Repositionner le texte</button><button id="deleteCadText" type="button">Supprimer le texte</button></div>
+</form>
+<hr><h2>Calques</h2><div id="layers"></div>
 <form id="rasterOptions" hidden>
   <fieldset>
     <legend>Image matricielle</legend>
@@ -160,7 +206,7 @@
       <label><input id="scissorsCoincidence" type="checkbox"> Coïncidence aux limites de coupe</label>
       <button id="resetScissors" type="button">Par défaut</button>
     </div>
-    <div class="tool-actions"><button type="button" id="applyModification">Appliquer</button><button type="button" id="cancelModification">Annuler</button></div>
+    <div class="tool-actions"><button type="button" id="applyModification">Appliquer</button><button type="button" id="cancelModification" data-cancel-edit>Annuler l’opération</button></div>
   </section>
   <section id="clipboardOptions" hidden>
     <h2>Cotes et contraintes à copier</h2>
@@ -227,9 +273,11 @@
       <div id="exportLayers" role="group" aria-label="Calques à exporter" hidden></div>
       <label><input type="radio" name="exportScope" value="all"> Tout le dessin</label>
     </fieldset>
-    <label class="export-check"><input id="exportConstruction" type="checkbox"> Inclure les traits de construction</label>
+    <label id="exportRasterRow" hidden>Calque matriciel à exporter <select id="exportRasterLayer"></select></label>
+    <label id="exportConstructionRow" class="export-check"><input id="exportConstruction" type="checkbox"> Inclure les traits de construction</label>
+    <label id="exportTextRow" class="export-check"><input id="exportText" type="checkbox" checked> Inclure le texte</label>
     <p id="exportNotice" role="status" hidden></p>
-    <div class="tool-actions"><button id="confirmExport" type="submit">Enregistrer sous…</button><button id="cancelExport" type="button">Annuler</button></div>
+    <div class="tool-actions"><button id="confirmExport" type="submit">Enregistrer sous…</button><button id="cancelExport" data-cancel-edit type="button">Annuler l’opération</button></div>
   </form>
 </dialog>
 <dialog id="importDialog" aria-labelledby="importTitle">
@@ -312,7 +360,7 @@
 <form id="transferLayerForm">
   <h2 id="transferLayerTitle"></h2>
   <label>Nom du calque <input id="transferLayerName" required maxlength="80" autofocus></label>
-  <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelTransferLayer">Annuler</button></div>
+  <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelTransferLayer" data-cancel-edit>Annuler l’opération</button></div>
 </form>
 </dialog>
 <dialog id="removeLayerDialog" aria-labelledby="removeLayerTitle" aria-describedby="removeLayerCount">
@@ -322,7 +370,7 @@
   <label>Calque de destination <select id="removeLayerDestination"></select></label>
   <div class="tool-actions">
     <button type="button" id="moveLayerTraces">Déplacer les tracés</button>
-    <button type="button" id="cancelRemoveLayer" autofocus>Annuler</button>
+    <button type="button" id="cancelRemoveLayer" autofocus>Annuler l’opération</button>
   </div>
 </dialog>
 <dialog id="rasterImportDialog" aria-labelledby="rasterImportTitle">
@@ -337,18 +385,40 @@
         <canvas id="rasterImportPreview" aria-label="Aperçu de l’image à importer"></canvas>
       </div>
       <aside>
-        <label for="rasterBrightness">Luminosité <output id="rasterBrightnessValue"></output></label>
-        <input id="rasterBrightness" type="range" min="-100" max="100" value="0">
-        <label for="rasterContrast">Contraste <output id="rasterContrastValue"></output></label>
-        <input id="rasterContrast" type="range" min="-100" max="100" value="0">
-        <hr>
-        <h3>Protection des couleurs</h3>
-        <button id="pickRasterColor" type="button" aria-pressed="false">Prélever dans l’image</button>
-        <ul id="rasterProtectedColors" aria-label="Couleurs protégées"></ul>
-        <label for="rasterColorTolerance">Tolérance de couleur <output id="rasterColorToleranceValue"></output></label>
-        <input id="rasterColorTolerance" type="range" min="0" max="100" value="5">
-        <label for="rasterUnprotectedOpacity">Opacité des couleurs non protégées <output id="rasterUnprotectedOpacityValue"></output></label>
-        <input id="rasterUnprotectedOpacity" type="range" min="0" max="100" value="100">
+        <details open><summary>Luminosité, contraste et couleurs</summary>
+          <label for="rasterBrightness">Luminosité <output id="rasterBrightnessValue"></output></label>
+          <input id="rasterBrightness" type="range" min="-100" max="100" value="0">
+          <label for="rasterContrast">Contraste <output id="rasterContrastValue"></output></label>
+          <input id="rasterContrast" type="range" min="-100" max="100" value="0">
+          <hr>
+          <h3>Protection des couleurs</h3>
+          <button id="pickRasterColor" type="button" aria-pressed="false">Prélever dans l’image</button>
+          <ul id="rasterProtectedColors" aria-label="Couleurs protégées"></ul>
+          <label for="rasterColorTolerance">Tolérance de couleur <output id="rasterColorToleranceValue"></output></label>
+          <input id="rasterColorTolerance" type="range" min="0" max="100" value="5">
+          <label for="rasterUnprotectedOpacity">Opacité des couleurs non protégées <output id="rasterUnprotectedOpacityValue"></output></label>
+          <input id="rasterUnprotectedOpacity" type="range" min="0" max="100" value="100">
+          <button id="pickRasterBackground" type="button" aria-pressed="false">Prélever le fond à effacer</button>
+        </details>
+        <details><summary>Nettoyer un plan scanné</summary>
+          <label><input id="scanEnabled" type="checkbox"> Convertir en noir et blanc</label>
+          <label>Seuil du trait <input id="scanThreshold" type="number" min="0" max="255" step="1" value="160" title="Montez le seuil pour récupérer les traits pâles."></label>
+          <label><input id="scanAdaptive" type="checkbox"> Corriger les ombres localement</label>
+          <label>Rayon local (px) <input id="scanShadowRadius" type="number" min="1" max="500" value="30" title="Choisissez une zone plus large que l’épaisseur du trait."></label>
+          <label>Taille maximale des taches (px²) <input id="scanSpecks" type="number" min="0" max="10000" value="0"></label>
+          <label>Coupure à combler (px) <input id="scanGap" type="number" min="0" max="30" value="0"></label>
+          <label>Épaisseur du trait (px) <input id="scanThickness" type="number" min="-8" max="8" value="0" title="Valeur négative pour affiner, positive pour épaissir."></label>
+          <label><input id="scanBackground" type="checkbox" checked> Rendre le fond blanc transparent</label>
+        </details>
+        <details><summary>Recadrer et redresser</summary>
+          <div class="raster-workshop-buttons">
+            <button id="rasterCrop" type="button">Recadrer par deux coins</button>
+            <button id="rasterPerspective" type="button">Redresser la perspective par quatre coins</button>
+          </div>
+          <label>Ligne de référence <select id="rasterStraightAxis"><option value="horizontal">Horizontale</option><option value="vertical">Verticale</option></select></label>
+          <button id="rasterStraighten" type="button">Aligner une ligne par deux points</button>
+          <button id="rasterResetShape" type="button">Annuler le recadrage et le redressement</button>
+        </details>
         <hr>
         <label><input id="showOriginalRaster" type="checkbox"> Voir l’original</label>
         <button id="resetRasterImport" type="button">Tout par défaut</button>
@@ -356,7 +426,7 @@
     </div>
     <footer>
       <output id="rasterImportStatus" role="status"></output>
-      <button id="cancelRasterImport" type="button">Annuler</button>
+      <button id="cancelRasterImport" data-cancel-edit type="button">Annuler l’opération</button>
       <button id="applyRasterImport" type="submit">Importer l’image</button>
     </footer>
   </form>
@@ -365,14 +435,14 @@
   <form id="renameLayerForm">
     <h2 id="renameLayerTitle">Renommer le calque</h2>
     <label>Nom du calque <input id="renameLayerName" type="text" maxlength="80" required autofocus></label>
-    <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelRenameLayer">Annuler</button></div>
+    <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelRenameLayer" data-cancel-edit>Annuler l’opération</button></div>
   </form>
 </dialog>
 <dialog id="calibrateRasterDialog" aria-labelledby="calibrateRasterTitle">
   <form id="calibrateRasterForm">
     <h2 id="calibrateRasterTitle">Calibrer l’image</h2>
     <label>Distance réelle <input id="calibrateRasterDistance" type="number" min="0" step="any" required autofocus><span id="calibrateRasterUnit"></span></label>
-    <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelCalibrateRaster">Annuler</button></div>
+    <div class="tool-actions"><button type="submit">Valider</button><button type="button" id="cancelCalibrateRaster" data-cancel-edit>Annuler l’opération</button></div>
   </form>
 </dialog>
 <dialog id="originDialog" aria-labelledby="originDialogTitle">
@@ -380,7 +450,7 @@
   <h2 id="originDialogTitle">Position du POT</h2>
   <label>X (POA) <input id="originDialogX" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
   <label>Y (POA) <input id="originDialogY" type="number" step="any" min="-1000000000000" max="1000000000000" required></label>
-  <div class="tool-actions"><button type="submit" autofocus>Valider</button><button type="button" id="cancelOrigin">Annuler</button></div>
+  <div class="tool-actions"><button type="submit" autofocus>Valider</button><button type="button" id="cancelOrigin" data-cancel-edit>Annuler l’opération</button></div>
 </form>
 </dialog>
 <dialog id="preferencesDialog" aria-labelledby="preferencesTitle">
@@ -398,13 +468,14 @@
       <div class="preferences-heading"><h2>Langue</h2></div>
       <label>Langue de l’interface <select id="interfaceLanguage">
         <option value="auto">Langue du navigateur</option>
-        <option value="en" lang="en">English</option>
-        <option value="fr" lang="fr">Français</option>
       </select></label>
     </section>
     <section id="cursorPreferences" class="preferences-content" aria-label="Curseurs" hidden>
-      <div class="preferences-heading"><h2>Formes par comportement</h2><button type="button" id="resetCursorShapes">Par défaut</button></div>
-      <div id="cursorShapes" class="cursor-preference-grid"></div>
+      <label>Mode de curseur <select id="cursorMode"><option value="precision">Flèche précise et indices</option><option value="classic">Curseurs par comportement</option></select></label>
+      <div id="classicCursorOptions" hidden>
+        <div class="preferences-heading"><h2>Formes par comportement</h2><button type="button" id="resetCursorShapes">Par défaut</button></div>
+        <div id="cursorShapes" class="cursor-preference-grid"></div>
+      </div>
       <div class="preferences-heading"><h2>Couleurs par outil</h2><button type="button" id="resetCursorColors">Par défaut</button></div>
       <div id="cursorColors" class="cursor-preference-grid"></div>
       <div class="preferences-heading"><h2>Indices d’aimantation</h2><button type="button" id="resetSnapIndicators">Par défaut</button></div>
@@ -418,7 +489,64 @@
     </section>
   </div>
 </dialog>
-<script src="locale-en.js"></script><script src="i18n.js"></script><script src="geometry.js"></script><script src="editing.js"></script><script src="constraints.js"></script><script src="formats.js"></script><script src="cursors.js"></script><script src="importing.js"></script><script src="numeric.js"></script><script src="raster-editing.js"></script><script src="app.js"></script>
+<dialog id="helpDialog" aria-labelledby="helpTitle">
+  <div class="help-layout">
+    <header class="preferences-header">
+      <div class="dialog-brand"><img src="velocivector-logo.svg" width="44" height="44" alt=""><h2 id="helpTitle">Guide des outils</h2></div>
+      <form method="dialog"><button type="submit">Fermer</button></form>
+    </header>
+    <div class="help-body">
+      <nav id="helpSections" aria-label="Rubriques d’aide"></nav>
+      <section id="helpContent" aria-labelledby="helpSectionTitle" tabindex="0">
+        <h3 id="helpSectionTitle"></h3>
+        <ul id="helpCards"></ul>
+      </section>
+    </div>
+  </div>
+</dialog>
+<dialog id="aboutDialog" aria-labelledby="aboutTitle">
+  <div class="help-layout">
+    <header class="preferences-header">
+      <h2 id="aboutTitle">À propos de Velocivector 2D CAD</h2>
+      <form method="dialog"><button type="submit">Fermer</button></form>
+    </header>
+    <div class="about-content">
+      <div class="dialog-brand about-brand"><img src="velocivector-logo.svg" width="84" height="84" alt=""><p class="about-version"><span>Version du logiciel</span> <data value="0.1.0">0.1.0</data></p></div>
+      <section aria-labelledby="aboutCredits">
+        <h3 id="aboutCredits">Création et contributions</h3>
+        <ul>
+          <li>Fablab L’Atelier à Bar-sur-Seine</li>
+          <li>Mathias Guerre</li>
+          <li>Romain D</li>
+          <li><span>Codex (OpenAI)</span> · <span>Assistance IA au développement</span></li>
+        </ul>
+      </section>
+      <section aria-labelledby="aboutAI">
+        <h3 id="aboutAI">Développement assisté par IA</h3>
+        <p>Velocivector a été développé avec l’aide de Codex, un assistant de programmation d’OpenAI. Le modèle utilisé pour cette contribution est GPT‑6. Il a aidé à écrire et relire le code, à préparer des tests et à rédiger la documentation.</p>
+        <p>Codex intervient pendant le développement. L’application fonctionne localement, sans service d’IA intégré.</p>
+      </section>
+      <section aria-labelledby="aboutLegal">
+        <h3 id="aboutLegal">Mentions légales et licence</h3>
+        <p>Velocivector 2D CAD est distribué sous licence GNU General Public License, version 3 (GPLv3). Le logiciel est fourni sans garantie, dans les limites prévues par la licence et la loi applicable.</p>
+        <p>Un logiciel libre peut être utilisé pour tout usage, étudié, modifié et partagé. Si vous redistribuez Velocivector, y compris une version modifiée, vous devez respecter la GPLv3 et fournir ou rendre accessible le code source correspondant selon ses modalités.</p>
+        <ul class="about-links">
+          <li><a href="LICENSE" download>Télécharger la licence incluse</a></li>
+          <li><a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">Lire la GPLv3 sur le site de GNU</a></li>
+          <li><a href="https://github.com/fablab-atelier/velocivector2D" target="_blank" rel="noopener">Consulter le code source</a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</dialog>
+<dialog id="pluginDialog">
+  <div class="preferences-header">
+    <h2 id="pluginTitle"></h2>
+    <form method="dialog"><button type="submit">Fermer</button></form>
+  </div>
+  <div id="pluginContent"></div>
+</dialog>
+<script src="locale-en.js"></script><script src="help-fr.js"></script><script src="help-en.js"></script><script src="i18n.js"></script><script src="geometry.js"></script><script src="editing.js"></script><script src="constraints.js"></script><script src="formats.js"></script><script src="cursors.js"></script><script src="importing.js"></script><script src="numeric.js"></script><script src="raster-editing.js"></script><script src="text-geometry.js"></script><script src="app.js"></script><script src="plugins/host.js"></script>
 </body></html>
 
 

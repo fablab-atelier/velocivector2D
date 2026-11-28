@@ -2,6 +2,17 @@
 const VelocivectorPlugins=(()=>{
   const version=1, idPattern=/^[a-z][a-z0-9-]{0,47}$/;
   const registry=new Map();
+  const launchOptions=new URLSearchParams(location.search);
+  const personalIds=new Set((launchOptions.get('personalPlugins')??'').split(',').filter(id=>idPattern.test(id)));
+  const personalRoot=(()=>{
+    if(location.protocol!=='file:'||!launchOptions.has('personalRoot')) return null;
+    try {
+      const url=new URL(launchOptions.get('personalRoot'));
+      return url.protocol==='file:'&&!url.host&&/^\/[a-z]:\/.+\/$/i.test(url.pathname)&&!url.search&&!url.hash?url:null;
+    } catch {return null;}
+  })();
+  const personalFolderName=personalRoot?decodeURIComponent(personalRoot.pathname.split('/').at(-2)):'plugins';
+  const isPluginFolder=folder=>folder.name.toLowerCase()===personalFolderName.toLowerCase();
   let expectedId=null, workshop=null, pending=null;
   const dialog=$('pluginDialog');
   const settings=new Map(), scripts=new Map();
@@ -82,10 +93,62 @@ const VelocivectorPlugins=(()=>{
     return added.map(entity=>entity.id);
   }
 
-  function preview(canvas,entities,{zoom=1,offset=[0,0]}={}) {
+  function insertDrawing(source) {
+    const model=Formats.native(JSON.stringify(source));
+    if(!model.entities.length&&!model.texts?.length) throw Error('Géométrie ou calque invalide.');
+    const factor=Formats.millimeters[model.units]/Formats.millimeters[doc.units];
+    const scale=point=>G.mul(point,factor);
+    const names=new Set(doc.layers.map(layer=>layer.name.toUpperCase()));
+    const layersByName=new Map(), originNames=new Map(), ids=new Map(), groups=new Map();
+    const reserved=new Set(doc.layers.flatMap(layer=>(layer.origins??[]).map(origin=>origin.name)));
+    let ordinal=1;
+    const layers=model.layers.map(layer=>{
+      const base=layer.name.trim();
+      let name=base;
+      for(let n=2;names.has(name.toUpperCase());n++) name=base+' ('+n+')';
+      names.add(name.toUpperCase());layersByName.set(layer.name,name);
+      const origins=(layer.origins??[]).map(origin=>{
+        while(reserved.has('POT'+ordinal)) ordinal++;
+        const next='POT'+ordinal++;
+        originNames.set(origin.name,next);reserved.add(next);
+        return {name:next,target:scale(origin.target)};
+      });
+      return {...layer,name,...(origins.length?{origins}:{}),
+        ...(layer.activeOrigin?{activeOrigin:originNames.get(layer.activeOrigin)??'POA'}:{})};
+    });
+    const entities=model.entities.map(entity=>{
+      const {id,vectorGroup,...shape}=entity;
+      const groupKey=JSON.stringify([entity.layer,vectorGroup]);
+      if(vectorGroup!==undefined&&!groups.has(groupKey)) groups.set(groupKey,newVectorGroup());
+      const added=identity({...G.transform(shape,scale,0,factor),layer:layersByName.get(entity.layer),
+        ...(groups.has(groupKey)?{vectorGroup:groups.get(groupKey)}:{})});
+      ids.set(id,added.id);return added;
+    });
+    const mapped=(model.constraints??[]).map(relation=>{
+      const refs=relation.refs.map(ref=>ref.kind==='origin'
+        ?{...ref,name:originNames.get(ref.name)??ref.name,target:scale(ref.target)}:{...ref,id:ids.get(ref.id)});
+      if(relation.type==='locked') return Formal.make('locked',refs,entities);
+      if(relation.origin) return {...relation,refs,origin:originNames.get(relation.origin)??relation.origin,target:scale(relation.target)};
+      if(!Formal.isDimension(relation)) return {...relation,refs};
+      const next={...relation,refs,layer:layersByName.get(relation.layer)??entities.find(e=>e.id===refs[0]?.id)?.layer,
+        offset:scale(relation.offset),value:relation.mode==='angle'?relation.value:relation.value*factor};
+      return next;
+    });
+    const texts=(model.texts??[]).map(text=>identity({...text,p:scale(text.p),layer:layersByName.get(text.layer),
+      ...(text.pathMode==='linked'?{pathId:ids.get(text.pathId)}:{})}));
+    const constraints=DimensionTable.rebase(mapped,doc,factor);
+    const batch=Formats.native(JSON.stringify({...model,units:doc.units,layers,entities,constraints,texts}));
+    const map=new Map(batch.entities.map(entity=>[entity.id,entity]));
+    if(!batch.constraints.every(c=>Formal.satisfied(map,c))) throw Error('Contraintes de projet invalides.');
+    commit(d=>({...d,layers:[...d.layers,...batch.layers],entities:[...d.entities,...batch.entities],
+      constraints:[...(d.constraints??[]),...batch.constraints],texts:[...(d.texts??[]),...batch.texts]}),false,false,true);
+    return entities.map(entity=>entity.id);
+  }
+
+  function preview(canvas,entities,{zoom=1,offset=[0,0],extraBounds=[]}={}) {
     const points=entities.map(entity=>({entity,trace:G.trace(entity,4)}));
     const lo=[Infinity,Infinity],hi=[-Infinity,-Infinity];
-    for(const {trace} of points) for(const p of trace) for(let i=0;i<2;i++) {
+    for(const trace of [...points.map(p=>p.trace),extraBounds]) for(const p of trace) for(let i=0;i<2;i++) {
       lo[i]=Math.min(lo[i],p[i]);hi[i]=Math.max(hi[i],p[i]);
     }
     const ctx=canvas.getContext('2d'), w=canvas.width,h=canvas.height;
@@ -105,6 +168,110 @@ const VelocivectorPlugins=(()=>{
     return project;
   }
 
+  function previewDrawing(canvas,drawing,{dimensions=[]}={}) {
+    const entities=new Map(drawing.entities.map(entity=>[entity.id,entity]));
+    const factor=Formats.millimeters[drawing.units];
+    const textRuns=(drawing.texts??[]).map(text=>({
+      font:TextGeometry.font(text.family),glyphs:TextGeometry.layout(text,entities,cadTextMeasure,factor)
+    }));
+    const extraBounds=textRuns.flatMap(({glyphs})=>glyphs.flatMap(glyph=>{
+      const metrics=glyph.metrics;
+      return [-(metrics.actualBoundingBoxLeft??0),metrics.actualBoundingBoxRight??metrics.width].flatMap(x=>
+        [-(metrics.actualBoundingBoxAscent??0),metrics.actualBoundingBoxDescent??0].map(y=>TextGeometry.position(glyph,x,y)));
+    }));
+    for(const c of dimensions) {
+      const layout=dimensionLayout(c,entities,p=>p,1);
+      if(layout) extraBounds.push(layout.label,...layout.guides.flat(),...(layout.arc??[layout.start,layout.end]));
+    }
+    const project=preview(canvas,drawing.entities,{extraBounds});
+    if(!project) return;
+    const scale=project([1,0])[0]-project([0,0])[0], ctx=canvas.getContext('2d');
+    ctx.save();
+    ctx.fillStyle=getComputedStyle(dialog).color;ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    for(const {font,glyphs} of textRuns) {
+      ctx.font=font;
+      for(const glyph of glyphs) {
+        ctx.save();ctx.translate(...project(glyph.q));ctx.rotate(-glyph.angle);
+        ctx.scale(glyph.sx*scale,glyph.sy*scale);ctx.fillText(glyph.value,-glyph.half,0);ctx.restore();
+      }
+    }
+    ctx.restore();
+    if(!dimensions.length) return;
+    const ink=palettes[theme], color=ink.point;
+    ctx.save();ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.strokeStyle=color;ctx.lineWidth=1.3;
+    const line=points=>{
+      ctx.beginPath();ctx.moveTo(...points[0]);
+      for(const point of points.slice(1)) ctx.lineTo(...point);
+      ctx.stroke();
+    };
+    for(const c of dimensions) {
+      const layout=dimensionLayout(c,entities,project,scale);
+      if(!layout) continue;
+      const {start,end,label,guides,arc}=layout;
+      for(const guide of guides) line(guide);
+      line(arc??[start,end]);
+      for(const [p,q] of [[start,arc?.[1]??end],[end,arc?.at(-2)??start]]) {
+        const angle=G.angle(p,q);
+        if(G.dist(p,q)>G.eps) line([G.polar(p,6,angle-.4),p,G.polar(p,6,angle+.4)]);
+      }
+      const text=(c.dimensionName?c.dimensionName+' · ':'')+
+        dimensionText({...c,dimensionName:undefined},entities,drawing.units);
+      const width=ctx.measureText(text).width+8;
+      ctx.fillStyle=ink.base;ctx.fillRect(label[0]-width/2,label[1]-9,width,18);
+      ctx.fillStyle=color;ctx.fillText(text,...label);
+    }
+    ctx.restore();
+  }
+
+  async function checkWorkshopFolder(plugin,folder) {
+    if(folder.name!==plugin.id) throw Error('wrongFolder');
+    const file=await folder.getFileHandle('workshop.json');
+    const metadata=VcvWorkshopModel.recipe(JSON.parse(await (await file.getFile()).text()));
+    if(metadata.id!==plugin.id) throw Error('wrongFolder');
+  }
+
+  async function removeWorkshop(plugin,parent,folder,source) {
+    if(saving) throw Error('removalBusy');
+    if(!isPluginFolder(parent)||
+      !await folder.isSameEntry(await parent.getDirectoryHandle(plugin.id))) throw Error('wrongFolder');
+    await checkWorkshopFolder(plugin,folder);
+    let currentSource;
+    try {currentSource=await folder.getFileHandle('source.vcv');}
+    catch(error) {if(error.name!=='NotFoundError') throw error;}
+    if(Boolean(currentSource)!==Boolean(source)||source&&!await source.isSameEntry(currentSource))
+      throw Error('removalChanged');
+    const forget=await RecentProjects.prepareForget(folder);
+    const removedMessage=translate(plugin,'workshopRemoved');
+    const detached=saveHandle&&await folder.resolve(saveHandle);
+    if(saving) throw Error('removalBusy');
+    saving=true;
+    try {await parent.removeEntry(plugin.id,{recursive:true});}
+    finally {saving=false;}
+    if(detached) {saveHandle=null;linkedSourceSave=null;}
+    dialog.close();
+    registry.delete(plugin.id);
+    settings.delete(plugin.id);
+    delete globalThis.VcvWorkshopSources?.[plugin.id];
+    try {localStorage.removeItem('velocivector-plugin:'+plugin.id);} catch {}
+    for(const path of [...scripts.keys()]) if(path.startsWith(plugin.id+'/')) {
+      scripts.delete(path);
+      const url=scriptUrl(path);
+      for(const script of document.head.querySelectorAll('script[src]')) if(script.src===url) script.remove();
+    }
+    try {
+      const url=new URL(location.href), ids=url.searchParams.get('plugins');
+      if(ids!==null) {
+        for(const key of ['plugins','personalPlugins']) if(url.searchParams.has(key))
+          url.searchParams.set(key,url.searchParams.get(key).split(',').filter(id=>id!==plugin.id).join(','));
+        history.replaceState(history.state,'',url);
+      }
+    } catch {}
+    refresh();
+    await forget();
+    message(removedMessage);
+  }
+
   function context(plugin) {
     return Object.freeze({
       t:key=>translate(plugin,key),
@@ -113,7 +280,18 @@ const VelocivectorPlugins=(()=>{
       selection:()=>structuredClone(selectionRuns(selected())),
       activeLayer:()=>activeLayer,
       units:()=>({code:doc.units,millimeters:Formats.millimeters[doc.units]}),
-      insert,preview,
+      insert,preview,insertDrawing,previewDrawing,
+      fonts:()=>[...cadFontChoices], prepareFont:prepareCadFont,
+      readDrawing:raw=>Formats.native(raw),
+      openDrawing:(data,name,handle=null,onSave=null)=>{
+        const source=Formats.native(JSON.stringify(data));
+        if(!canReplace()) return false;
+        dialog.close();
+        load(source,name);
+        saveHandle=handle;
+        linkedSourceSave=handle&&onSave?{handle,write:onSave}:null;
+        return true;
+      },
       geometry:Object.freeze({trace:G.trace,length:G.traceLength}),
       setupNumber:input=>Numeric.install(input),
       toolDefault:(key,fallback)=>Object.hasOwn(preferences(plugin).values,key)?preferences(plugin).values[key]:fallback,
@@ -126,7 +304,12 @@ const VelocivectorPlugins=(()=>{
         input.click();
       }),
       download:(content,name,mime)=>download(content,name,mime),
-      status:text=>message(String(text))
+      ...(plugin.generatedWorkshop?{
+        checkWorkshopFolder:folder=>checkWorkshopFolder(plugin,folder),
+        removeWorkshop:(parent,folder,source)=>removeWorkshop(plugin,parent,folder,source)
+      }:{}),
+      status:text=>message(String(text)),
+      isPluginFolder,pluginFolderName:()=>personalFolderName
     });
   }
 
@@ -328,11 +511,15 @@ const VelocivectorPlugins=(()=>{
     return ()=>{closeWindow();cleanup();};
   }
 
+  function scriptUrl(path) {
+    const id=path.split('/')[0];
+    return personalRoot&&personalIds.has(id)?new URL(path,personalRoot).href:new URL('plugins/'+path,document.baseURI).href;
+  }
   function localScript(path) {
     if(!/^(?:[a-z0-9-]+\/)*[a-z0-9-]+\.js$/.test(path)) return Promise.reject(Error('Invalid extension asset.'));
     if(!scripts.has(path)) scripts.set(path,new Promise((resolve,reject)=>{
       const script=document.createElement('script');
-      script.src='plugins/'+path;script.onload=resolve;script.onerror=reject;
+      script.src=scriptUrl(path);script.onload=resolve;script.onerror=reject;
       document.head.append(script);
     }));
     return scripts.get(path);
@@ -343,7 +530,7 @@ const VelocivectorPlugins=(()=>{
   }
 
   function refresh() {
-    const menu=$('pluginsMenu'), buttons=[];
+    const menu=$('pluginsMenu'), buttons=[], builder=[];
     for(const {plugin,entries} of registry.values()) for(const {entry,method} of entries) {
       if(method==='write') continue;
       const api=context(plugin), button=document.createElement('button');
@@ -365,9 +552,10 @@ const VelocivectorPlugins=(()=>{
           message(api.t(error.message));
         }
       });
-      buttons.push(button);
+      (plugin.id==='workshop-builder'?builder:buttons).push(button);
     }
-    menu.replaceChildren(...buttons);
+    if(builder.length&&buttons.length) buttons.push(document.createElement('hr'));
+    menu.replaceChildren(...buttons,...builder);
   }
 
   dialog.setAttribute('aria-labelledby','pluginTitle');
@@ -377,9 +565,9 @@ const VelocivectorPlugins=(()=>{
     $('pluginTabs').replaceChildren();
     $('pluginContent').replaceChildren();
   });
-  const requested=new URLSearchParams(location.search).get('plugins');
+  const requested=launchOptions.get('plugins');
   async function start() {
-    for(const id of new Set((requested??'transmissions,pulleys,airfoils,drone').split(',').filter(id=>idPattern.test(id)))) {
+    for(const id of new Set((requested??'transmissions,pulleys,airfoils,drone,workshop-builder').split(',').filter(id=>idPattern.test(id)))) {
       expectedId=id;
       pending=null;
       try {await localScript(id+'/plugin.js');await pending;}

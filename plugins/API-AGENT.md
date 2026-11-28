@@ -20,3 +20,5 @@
 - Files and geometry: `api.openFile(accept)`, `api.download(data,filename,mime)`, `api.geometry.trace(entity,scale)`, `api.geometry.length(entity)`.
 - API v1 has no background or remote automation endpoint. An agent helper can pass a declarative batch to a local command for user review.
 - See [developer documentation](README.md) and [working workshop](transmissions/plugin.js).
+
+- Parametric workshops can call `api.readDrawing(raw)` to validate a VCV, `api.insertDrawing(source)` to insert a native drawing with layers, relations and unit conversion, and `api.openDrawing(source,name,fileHandle?,onSave?)` to open an editable source after the standard replacement check. The optional save callback receives the written VCV text when saving back to the same file.

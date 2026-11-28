@@ -117,6 +117,13 @@
 .about-version data{margin-inline-start:6px;font-weight:700;color:var(--accent)}
 .app-brand,.dialog-brand{display:flex;align-items:center;gap:8px}
 .app-brand img,.dialog-brand img{display:block;flex:none;object-fit:contain}
+#brandPreview{width:min(440px,calc(100vw - 24px));padding:14px;text-align:center;overflow:hidden;background:var(--panel);color:inherit;border:1px solid var(--border);border-radius:10px}
+#brandPreview::backdrop{background:#0006}
+#brandPreview{user-select:none}
+#brandPreviewClose{position:absolute;z-index:1;inset-block-start:8px;inset-inline-end:8px;padding:1px 8px;font-size:19px;line-height:1.2}
+#brandPreviewTarget{display:grid;place-items:center;margin:auto;width:100%;height:min(400px,calc(100dvh - 90px));padding:0;border:0;background:transparent;cursor:pointer;touch-action:manipulation}
+#brandPreviewTarget svg{width:min(200px,calc((100vw - 60px)/2),calc((100dvh - 110px)/2));height:auto;overflow:visible;transform:scale(var(--logo-scale,1))}
+#brandPreviewTarget path{transform-box:fill-box;transform-origin:center}
 .about-brand{gap:14px;margin-block-end:12px}
 .about-brand p{margin:0}
 .about-links a{color:var(--accent)}
@@ -159,7 +166,7 @@
 
 #originDialog{min-width:min(290px,90vw);background:var(--panel);color:inherit;border:1px solid var(--border);border-radius:8px;padding:16px}#originDialog::backdrop{background:#11192370}#originDialog input{width:135px}#selectedOriginForm{margin:8px 0 14px}
 
-.constraint-command{display:inline-grid;place-items:center;min-width:31px;min-height:29px;padding:3px 6px}.constraint-icon{width:20px;height:20px;display:block;fill:none;stroke:var(--constraint-dark);stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}[data-theme="light"] .constraint-icon{stroke:var(--constraint-light)}.constraint-row .constraint-command{justify-items:start}.constraint-row .constraint-command .constraint-icon{margin-left:3px}
+.constraint-command{display:inline-grid;place-items:center;min-width:31px;min-height:29px;padding:3px 6px}.constraint-icon{width:20px;height:20px;display:block;fill:none;stroke:var(--constraint-dark);stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}[data-theme="light"] .constraint-icon{stroke:var(--constraint-light)}
 
 #tools button{position:relative;display:grid;place-items:center}#tools img,.tool-variants img{width:25px;height:25px;display:block}.tool-variants img{width:23px;height:23px}#tools button.has-variants::after{content:"";position:absolute;right:4px;bottom:4px;width:7px;height:7px;background:#000;clip-path:polygon(0 100%,100% 0,100% 100%);filter:drop-shadow(0 0 1px #f3f6fa)}
 
@@ -210,7 +217,7 @@
 #importJunctionMethod{width:auto;max-width:150px}#importPreviewLayer{max-width:160px}
 #autoCloseMethod{width:auto;max-width:145px}
 #drawingMenu,#modificationMenu{min-width:240px;max-height:calc(100vh - 75px);overflow:auto}
-.tool-visibility-command{display:flex;align-items:center;gap:7px}.tool-visibility-command img{width:19px;height:19px}
+.tool-visibility-command{display:flex;align-items:center;gap:7px}.tool-visibility-command img{width:19px;height:19px}.tool-visibility-command .constraint-icon{flex:none}
 
 #importCalculation{flex:0 0 100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 #importCalculation progress{flex:1;min-width:100px;accent-color:var(--accent)}
@@ -316,3 +323,40 @@
 .drone-views{display:flex;flex-wrap:wrap;gap:4px;padding:4px}
 .transmission-form .drone-preview canvas{min-height:0;flex:1;height:0;cursor:default;background:#75818b}
 .drone-size-hint{display:block;margin-block:5px;color:inherit;opacity:.8}
+#transformSize{display:flex;gap:5px;align-items:center}
+#transformSize label{margin:0;gap:4px;font-size:12px}
+#transformSize input{width:7ch;padding:4px;min-height:30px}
+#transformSizeLock{display:grid;place-items:center;min-height:30px;padding:3px}
+#transformSizeLock[aria-pressed=true] [data-unlocked],#transformSizeLock[aria-pressed=false] [data-locked]{display:none}
+.history-command{display:inline-grid;place-items:center;min-width:32px;min-height:30px;padding:3px 5px}
+.history-command .command-icon{width:22px;height:22px}
+.vcv-workshop .transmission-preview{display:flex}
+.transmission-form.vcv-workshop canvas{height:100%;min-height:0;cursor:default}
+.vcv-workshop-actions{display:flex;gap:5px;flex-wrap:wrap}
+.vcv-workshop fieldset>button{margin:2px}
+.vcv-workshop fieldset h3{font-size:.9rem;margin:8px 0 4px}
+.vcv-workshop fieldset details{border-block-start:1px solid var(--border);padding:4px 0}
+.dimension-editor{position:fixed;inset:105px 16px auto auto;width:min(330px,calc(100vw - 32px));z-index:22;padding:12px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:inherit}
+.dimension-editor label{display:grid;grid-template-columns:1fr;gap:6px}
+.dimension-editor input#dimensionExpression{width:100%}
+.dimension-editor output,#dimensionTableStatus{display:block;padding:0 8px}
+.dimension-editor output:not(:empty),#dimensionTableStatus:not(:empty){padding-block:5px}
+#dimensionTableDialog{width:min(870px,92vw);max-height:85dvh;padding:0;background:var(--panel);color:inherit;border:1px solid var(--border);border-radius:8px}
+#dimensionTableDialog h2{margin:0;flex:1}
+.dimension-table-scroll{max-height:60dvh;overflow:auto}
+#dimensionTableDialog table{width:100%;border-collapse:collapse;text-align:start}
+#dimensionTableDialog :is(th,td){padding:5px 8px;border-block-end:1px solid var(--border);text-align:start}
+#dimensionTableDialog input:not([type=file]){width:100%;min-width:8ch}
+#dimensionTableDialog th{position:sticky;top:0;background:var(--panel)}
+.vcv-workshop .workshop-layer-text{padding-inline-start:10px;margin-block:0 8px}
+.vcv-workshop .workshop-text textarea{width:100%;min-width:0;resize:vertical}
+.vcv-workshop .workshop-text>label{display:grid;gap:4px}
+.workshop-parameter{border-block-end:1px solid var(--border);padding-block:4px}
+.workshop-parameter p{overflow-wrap:anywhere;unicode-bidi:plaintext}
+#recentProjects>summary{display:flex;justify-content:space-between;align-items:center;padding:6px 8px}
+#recentProjects>summary::after{content:'▸';margin-inline-start:10px}
+#recentProjects[open]>summary::after{content:'▾'}
+#recentProjectList{max-height:min(42vh,350px);max-width:min(68vw,430px);overflow:auto;padding-inline-start:8px}
+#recentProjectList button span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#recentProjectList p{margin:4px 8px}
+#pluginsMenu hr{margin:4px 6px}

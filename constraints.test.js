@@ -568,14 +568,22 @@ test('point-to-trace coincidence projects onto each supported curve without movi
   }
 });
 
-test('point-on-segment and point-on-arc coincidence cannot leave the finite trace',()=>{
-  const p={id:2,type:'point',p:[[14,-3]],layer:'0'};
+test('point coincidence uses the closest point on the supporting line or full circle',()=>{
   const segment=line(1,[0,0],[10,0]);
-  let items=[segment,p];
-  near(assertSolved(items,[C.make('coincident',[point(2),edge(1)],items)],new Set([1]))[1].p[0],[10,0]);
   const arc={...G.arc([0,0],[5,5],[10,0]),id:1,layer:'0'};
-  items=[arc,p];
-  near(assertSolved(items,[C.make('coincident',[edge(1),point(2)],items)],new Set([1]))[1].p[0],[10,0]);
+  for(const position of [[14,-3],[-4,3],[5,0]]) {
+    const p={id:2,type:'point',p:[position],layer:'0'};
+    for(const [support,target] of [[segment,[position[0],0]],
+      [arc,G.dist(arc.c,position)>0?G.polar(arc.c,arc.r,G.angle(arc.c,position)):G.polar(arc.c,arc.r,arc.a)]]) {
+      const items=[support,p];
+      for(const refs of [[edge(1),point(2)],[point(2),edge(1)]]) {
+        const constraint=C.make('coincident',refs,items);
+        const solved=assertSolved(items,[constraint],new Set([1]));
+        assert.equal(solved[0],support);
+        near(solved[1].p[0],target);
+      }
+    }
+  }
   assert.equal(C.make('coincident',[edge(1),edge(2)],[segment,circle(2,[0,0],4)]),null);
 });
 
@@ -754,4 +762,38 @@ test('movement records newly aligned axes, midpoint and perpendicular contacts w
   assert.ok(relations.every(c=>C.satisfied(entities,c)));
   assert.equal(C.movementRelations(moved,moved,relations).length,relations.length);
   assert.equal(C.movementRelations(before,moved,[],()=>true,e=>e.id!==1).some(c=>c.type==='perpendicular'),false);
+});
+
+test('radial constraints accept circular outlines or centers and leave segment ends free',()=>{
+  const segment=line(1,[20,8],[40,8]);
+  const arc={id:2,type:'arc',c:[0,0],r:10,a:0,s:Math.PI/2,layer:'0'};
+  for(const [round,center] of [[circle(2,[0,0],10),0],[arc,2],
+    [{id:2,type:'path',segments:[arc],closed:false,layer:'0'},2]]) {
+    const items=[segment,round];
+    const relation=C.make('radial',[point(2,center),edge(1)],items);
+    assert.ok(relation);
+    assert.deepEqual(relation,C.make('radial',[edge(1),edge(2)],items));
+    assert.ok(C.valid(items,[relation]));
+    const solved=C.solve(items,[relation],new Set([2]));
+    assert.ok(solved);
+    assert.equal(solved[1],round);
+    assert.ok(C.satisfied(new Map(solved.map(e=>[e.id,e])),relation));
+    assert.ok(solved[0].p.every(p=>G.dist(p,[0,0])>10));
+    const slide=line(1,[25,0],[35,0]), rotate=line(1,[0,25],[0,35]);
+    for(const changed of [slide,rotate]) assert.ok(C.satisfied(new Map([[1,changed],[2,round]]),relation));
+    assert.equal(C.make('radial',[edge(1),point(1)],items),null);
+  }
+  assert.equal(C.make('radial',[edge(1),point(2,0)],[segment,arc]),null);
+});
+
+test('Protected movement rejects an opposite tangency branch even when the equation is satisfied',()=>{
+  const straight=line(1,[-4,0],[0,0]);
+  const curve={id:2,type:'arc',c:[0,2],r:2,a:-Math.PI/2,s:Math.PI/2,layer:'0'};
+  const before=[straight,curve], tangent=C.make('tangent',[edge(1),edge(2)],before);
+  const reversed=[line(1,[4,0],[0,0]),curve];
+  assert.ok(tangent.contact);
+  assert.ok(C.satisfied(new Map(reversed.map(e=>[e.id,e])),tangent));
+  assert.equal(C.preservesContourOrientation(before,reversed,[tangent]),false);
+  const translated=before.map(e=>G.transform(e,p=>G.add(p,[10,15])));
+  assert.ok(C.preservesContourOrientation(before,translated,[tangent]));
 });

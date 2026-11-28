@@ -1,9 +1,25 @@
 'use strict';
 const Numeric=(()=>{
-  function evaluate(text) {
+  let lookup=()=>NaN;
+  const tokenize=text=>String(text).trim().replace(/,/g,'.')
+    .match(/(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|[A-Za-z_][A-Za-z_0-9]*|\*\*|[+*/()-]|\S/gi)??[];
+  const identifier=/^[A-Za-z_][A-Za-z_0-9]*$/;
+  const isLiteral=text=>/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(String(text).trim().replace(',','.'));
+  const literalTerms=text=>tokenize(text).filter(isLiteral).map(Number);
+  function replaceTerms(text,values) {
+    let index=0;
+    return tokenize(text).map(token=>{
+      if(!isLiteral(token)) return token;
+      const value=values[index++];
+      return value===undefined?token:value<0?'('+value+')':String(value);
+    }).join(' ');
+  }
+  const references=text=>tokenize(text).filter(token=>identifier.test(token));
+  const rewrite=(text,replace)=>tokenize(text).map(token=>identifier.test(token)?replace(token):token).join(' ');
+  function evaluate(text,resolve=lookup) {
     const input=String(text).trim().replace(/,/g,'.');
     if(!input||input.length>512) return NaN;
-    const tokens=input.match(/(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|\*\*|[+*/()-]|\S/gi);
+    const tokens=tokenize(input);
     let i=0;
     const take=token=>tokens[i]===token&&(i++,true);
     const checked=value=>{if(!Number.isFinite(value)) throw Error();return value;};
@@ -14,6 +30,7 @@ const Numeric=(()=>{
         return value;
       }
       const token=tokens[i++];
+      if(identifier.test(token??'')) return checked(resolve(token));
       if(!/^(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(token??'')) throw Error();
       return checked(Number(token));
     }
@@ -60,7 +77,7 @@ const Numeric=(()=>{
     function validate(normalize=false) {
       const number=value(), blank=!input.value.trim();
       input.setCustomValidity(!blank&&!Number.isFinite(number)?(typeof I18n==='undefined'?'Saisissez un calcul valide dans les limites du champ.':I18n.t('Saisissez un calcul valide dans les limites du champ.')):'');
-      if(normalize&&Number.isFinite(number)) input.value=String(number);
+      if(normalize&&Number.isFinite(number)&&!references(input.value).length) input.value=String(number);
       return Number.isFinite(number);
     }
     const descriptor=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
@@ -79,6 +96,6 @@ const Numeric=(()=>{
       } else if(!input.form&&!input.closest('#modifyOptions')) input.blur();
     },true);
   }
-  return {evaluate,install};
+  return {evaluate,install,isLiteral,literalTerms,replaceTerms,references,rewrite,setResolver:resolve=>{lookup=resolve;}};
 })();
 if(typeof module!=='undefined') module.exports=Numeric;

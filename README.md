@@ -147,3 +147,19 @@ Choisir **Texte (T)**, saisir le contenu puis cliquer dans le dessin. Pour dépl
 Dans **Texte sur une courbe**, choisir **Courbe du dessin** et cliquer sur le tracé, ou choisir **Courbe circulaire** et renseigner le rayon. Le curseur de placement choisit le point de départ. Le décalage longitudinal, la distance à la courbe, le côté et l’orientation des lettres restent modifiables. Sur une courbe ouverte, seuls les caractères dont le centre tient sur le support sont affichés.
 
 **Inclure le texte** est coché par défaut pour les exports DXF et SVG. Les lettres deviennent des contours fermés, avec leurs évidements. Le VCV conserve le texte à éditer.
+
+Le **Panneau des raccourcis** se trouve en bas à droite de la zone de dessin. Cliquez sur son pictogramme de clavier pour afficher ou replier les touches et gestes de l’outil actif. Il suit les raccourcis personnalisés et mémorise son état. Retrouvez cette fiche dans **Aide → Guide des outils → Calques et précision → Panneau des raccourcis**.
+
+Avec une géométrie sélectionnée, les flèches déplacent la sélection par pas de 1 mm quel que soit l’outil actif. **Ctrl + flèche** utilise 0,1 mm et **Maj + flèche** utilise 10 mm. Un maintien suit la répétition du clavier et s’annule en une fois. Les cotes et contraintes sont conservées. Les touches sont configurables dans **Préférences → Raccourcis → Déplacement au clavier**.
+
+### Tableau des cotes
+
+**Projet → Éditer les cotes du dessin** affiche les identifiants, les valeurs calculées et les formules. Les identifiants commencent à C1 et peuvent être renommés avec des lettres sans accent, des chiffres et des traits de soulignement. Le premier caractère est une lettre ou un trait de soulignement. Lors d’un renommage, les formules pointant vers cette cote sont mises à jour.
+
+Dans l’éditeur d’une cote, cliquez sur une cote du dessin pour insérer son identifiant. Un calcul comme `Largeur/2+5` est également utilisable dans les champs numériques. Les modifications de cote se propagent aux cotes qui en dépendent. Les cotes pilotées fournissent leur mesure réelle et se modifient par leur géométrie. Une référence circulaire ou une valeur incompatible empêche la modification. Si une cote référencée est supprimée, sa dernière valeur est conservée comme constante dans les autres formules.
+
+Le tableau CSV est inclus dans le fichier VCV. **Exporter le CSV** crée une copie pour Excel, LibreOffice ou Google Sheets. Pour réimporter vos modifications, exportez de nouveau un fichier CSV depuis le tableur et conservez les en-têtes et la colonne `Cle`. La Fabrique d’ateliers réutilise ces identifiants et recalcule les formules avant l’insertion.
+
+**Fichier → Enregistrer** réécrit le projet ouvert lorsque le navigateur a l’autorisation d’écrire dans le fichier. Le navigateur peut demander cette permission au premier enregistrement. Utilisez **Enregistrer sous** pour choisir une autre destination. **Fichier → Ouvrir récent** conserve localement les 15 derniers projets ouverts avec le sélecteur natif.
+
+Les fichiers VCV enregistrent les 20 dernières étapes d’annulation. Après avoir rouvert le projet, **Ctrl+Z** permet de les parcourir, et **Rétablir** permet de revenir en avant parmi les étapes annulées depuis l’ouverture.

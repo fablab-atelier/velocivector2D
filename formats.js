@@ -64,7 +64,10 @@ const createFormats=()=>{
     return {...image,center,scale:image.scale*factor,angle:(image.angle+degrees)%360};
   }
   function native(raw) {
-    const doc=JSON.parse(raw.replace(/^\uFEFF/,''));
+    return validateNative(JSON.parse(raw.replace(/^\uFEFF/,'')));
+  }
+
+  function validateNative(doc) {
     if(doc?.version!==1 || !Number.isInteger(doc.units) || !units[doc.units] || !Array.isArray(doc.layers) || !Array.isArray(doc.entities)) throw Error('Format de projet incompatible.');
     const names=new Set(), imageLayers=new Set(), originNames=new Set();
     for(const l of doc.layers) {
@@ -562,7 +565,7 @@ const createFormats=()=>{
       '" data-velocivector-poa="'+point([0,0])+'">\n'+
       '<g fill="none" stroke-width="'+lineWidth+'">\n'+layers.join('\n')+'\n</g>\n</svg>\n';
   }
-  return {units,millimeters,empty,native,pngSize,rasterMime,rasterSource,validRasterPlacement,rasterContains,transformRaster,read,write,dxfBytes,decodeDXF,writeSVG,exportSubset,hasExportGeometry};
+  return {units,millimeters,empty,native,validateNative,pngSize,rasterMime,rasterSource,validRasterPlacement,rasterContains,transformRaster,read,write,dxfBytes,decodeDXF,writeSVG,exportSubset,hasExportGeometry};
 };
 const Formats=createFormats();
 if(typeof module!=='undefined') module.exports=Formats;

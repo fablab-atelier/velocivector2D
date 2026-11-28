@@ -93,7 +93,7 @@ public static class VelocivectorWindows
             {
                 var title = new StringBuilder(512);
                 GetWindowText(window, title, title.Capacity);
-                if (title.ToString().StartsWith("Velocivector 2D CAD", StringComparison.OrdinalIgnoreCase))
+                if (title.ToString().StartsWith("Velocivector 0.1.0 alpha", StringComparison.OrdinalIgnoreCase))
                     windows.Add(window);
             }
             return true;

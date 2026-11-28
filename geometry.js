@@ -522,14 +522,14 @@ const createG=()=>{
   }
 
   function reverseGeometry(e) {
-    if(e.type==='path') return {...e,segments:e.segments.toReversed().map(reverse)};
+    if(e.type==='path') return {...e,segments:e.segments.slice().reverse().map(reverse)};
     if(e.type==='arc') return {...e,a:e.a+e.s,s:-e.s};
     if(e.type==='ellipse'&&e.s!==undefined) return {...e,t:mod(e.t+e.s),s:-e.s};
     if(e.type==='ellipse'||e.type==='circle') return {...e,reversed:!e.reversed};
-    if(e.type==='spline' && e.handles) return {...e,p:e.p.toReversed(),
+    if(e.type==='spline' && e.handles) return {...e,p:e.p.slice().reverse(),
       handles:Object.fromEntries(Object.entries(e.handles).map(([i,v])=>[e.p.length-1-Number(i),typeof v==='number'?v:
         {...v,inRatio:v.outRatio,outRatio:v.inRatio,inAngle:v.outAngle,outAngle:v.inAngle}]))};
-    if(e.p) return {...e,p:e.p.toReversed()};
+    if(e.p) return {...e,p:e.p.slice().reverse()};
     return e;
   }
 

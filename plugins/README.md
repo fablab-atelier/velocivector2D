@@ -158,3 +158,23 @@ Les deux plaques partagent les perçages d’entretoises. En vue de côté, les 
 L’insertion crée deux calques à l’échelle réelle. Les disques d’hélices et la vue de côté servent de repères dans l’atelier. Les réglages vérifient les dégagements géométriques et fournissent une base de travail pour le dimensionnement du châssis.
 
 [SpeedyBee F405 V4](https://www.speedybee.com/speedybee-f405-v4-bls-55a-30x30-fc-esc-stack/) · [SpeedyBee F405 Mini](https://www.speedybee.com/speedybee-f405-mini-bls-35a-20x20-stack/) · [SpeedyBee F745 AIO](https://www.speedybee.com/speedybee-f745-35a-25-5x25-5-aio-flight-controller/) · [Densités des stratifiés DragonPlate](https://dragonplate.com/solid-carbon-fiber-sheets-plates)
+
+### Fabrique d’ateliers
+
+Ouvrez **Extensions → Fabrique d’ateliers**, puis utilisez le dessin actif ou ouvrez un projet VCV. Donnez un nom à l’atelier et choisissez un rôle pour chaque calque contenant des tracés ou du texte. Les objets indépendants sont activables séparément. Les calques de variante apparaissent dans une liste à choix unique. Cochez les cotes à exposer et ajoutez, si nécessaire, un libellé et des limites de saisie dans l’unité du dessin source.
+
+**Créer ou mettre à jour l’atelier** écrit le dossier dans `plugins` lorsque le navigateur permet de sélectionner un répertoire. **Télécharger en ZIP** fournit le même dossier à décompresser dans `plugins`. Fermez Velocivector et relancez-le avec le lanceur pour détecter le nouveau plugin.
+
+L’atelier généré affiche un aperçu et résout les valeurs avant insertion. Il signale les valeurs incompatibles et les relations qui pointent vers des calques écartés. Une cote pilotée peut devenir pilotante si le solveur trouve une géométrie compatible avec sa nouvelle valeur. L’insertion conserve les tracés, cotes, contraintes, groupes et origines des calques choisis, avec conversion vers l’unité du dessin d’accueil. La Fabrique propose aussi les calques qui contiennent uniquement du texte.
+
+**Modifier le fichier source** ouvre `source.vcv` dans Velocivector. Sélectionnez le dossier de cet atelier lorsque le navigateur le demande. L’enregistrement dans ce fichier actualise aussi les données utilisées par le plugin. Si le navigateur ne peut pas écrire dans le dossier, enregistrez le VCV modifié puis rechargez-le dans **Modifier les paramètres de l’atelier** pour republier. Ce bouton permet aussi de changer les paramètres visibles et les rôles des calques. Si une cote est recréée sur d’autres références, elle peut être à relier dans cette configuration.
+
+Le dossier contient `plugin.js`, `workshop.json`, `source.vcv` et `source-data.js`. Son atelier utilise le moteur commun fourni dans `plugins/workshop-builder`.
+
+Avec l’édition Windows installée, déposez ou publiez les ateliers personnels dans le dossier choisi pendant l’installation. Le menu Démarrer permet de choisir un autre dossier pour le prochain lancement. Les ateliers livrés avec Velocivector sont dans `app/plugins` et sont mis à jour avec le programme.
+
+Dans un atelier généré, **Supprimer l’atelier** demande de sélectionner le dossier `plugins`. Si `source.vcv` est présent, **Ouvrir le dossier source** ouvre le sélecteur natif à cet emplacement. Copiez le VCV hors du dossier de l’atelier pour le conserver, puis confirmez la suppression. Le dossier de l’atelier et ses préférences locales sont supprimés. Les géométries déjà insérées dans les dessins restent éditables.
+
+Pour un calque contenant du texte, **Texte éditable** est activé par défaut. L’atelier généré affiche un champ par bloc de texte et permet de régler la police, l’alignement, la hauteur, les espacements, la largeur des lettres, la rotation et les paramètres de courbe. Il reprend les réglages du VCV source. Désactivez l’option sur le calque pour insérer ses textes d’origine. Dans les deux cas, les textes insérés restent éditables dans Velocivector. Un texte lié à une courbe est inséré avec son support si le calque correspondant est inclus.
+
+Dans la Fabrique, dépliez une fiche de cote pour afficher son repère dans l’aperçu. Une cote qui recopie directement l’identifiant d’une autre suit sa cote maîtresse. La Fabrique propose de régler la maîtresse et conserve les liens. Si la maîtresse est calculée, l’atelier expose les nombres du calcul dans des champs distincts et conserve la formule et ses références. Si la formule contient uniquement des références, les cotes qui l’alimentent servent de réglages.

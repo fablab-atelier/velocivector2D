@@ -10,6 +10,10 @@
 # Local dependencies and generated output
 node_modules/
 coverage/
+/.inno-compiler/
+/.inno-compiler-download.exe
+/packaging/.build/
+/packaging/.tools/
 
 # System files
 Thumbs.db

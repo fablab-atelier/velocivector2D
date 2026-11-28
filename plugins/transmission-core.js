@@ -20,10 +20,10 @@
       const a=phase+tooth*pitch;
       const flank=Array.from({length:7},(_,i)=>start+(high-start)*i/6);
       if(start>low+1e-9) flank.unshift(low);
-      const towardTip=internal?flank.toReversed():flank;
+      const towardTip=internal?flank.slice().reverse():flank;
       for(const radius of towardTip) points.push(polar(c,radius,a-half(radius)));
       for(let i=1;i<4;i++) points.push(polar(c,tip,a+half(tip)*(2*i/4-1)));
-      for(const radius of towardTip.toReversed()) points.push(polar(c,radius,a+half(radius)));
+      for(const radius of towardTip.slice().reverse()) points.push(polar(c,radius,a+half(radius)));
       for(let i=1;i<4;i++) points.push(polar(c,root,a+half(root)+(pitch-2*half(root))*i/4));
     }
     return loop(points);
